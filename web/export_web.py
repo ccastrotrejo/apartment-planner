@@ -101,6 +101,40 @@ EXAMPLE = [
     ('hall-cabinet', 200, 117.35, 180),
 ]
 
+# Layout ideas shown in the page's Layouts sheet: each starts from EXAMPLE and moves some pieces
+# ({piece: [(x, z, r), ...]} replaces that piece's placements in order). All are collision-free.
+IDEAS = [
+    ('Desk at the corner window', 'Standing desk turned to face the west window; the north window stays open '
+     'for plants and the lamp.',
+     {'standing-desk': [(16.9, 27.6, 90)], 'office-chair': [(44.5, 27.6, -90)], 'plant-monstera': [(97, 16, 0)],
+      'plant-zz': [(16, 63, 0)], 'torchiere-lamp': [(70, 9, 0)]}),
+    ('Sofa on the bedroom wall', 'Living room flipped: the sectional backs onto the bedroom partition and the TV '
+     'rolls to the west wall.',
+     {'sectional': [(93, 120, -90)], 'rug-6x9': [(63, 112, 90)], 'coffee-table': [(48, 112, 90)],
+      'tv-stand': [(8, 112, 90)], 'tier-shelf': [(7, 152, 90)], 'torchiere-lamp': [(116, 60, 0)]}),
+    ('Bed on the west wall', 'Bed head on the bedroom\'s west wall, facing east; bikes move to the window and '
+     'the east wall.',
+     {'queen-bed': [(174.2, 66, 90)], 'nightstand': [(141.55, 24.3, 90), (141.55, 107.7, 90)],
+      'tripod-lamp': [(158.5, 21, 0)], 'bike-black': [(207, 9, 0)], 'bike-red-wall': [(233, 60, -90)],
+      'hall-cabinet': [(215, 117.35, 180)]}),
+    ('TV in the bedroom', 'The TV rolls to the foot of the bed; the red bike hangs on the living partition and '
+     'the living room becomes a lounge.',
+     {'tv-stand': [(141.7, 60, 90)], 'bike-red-wall': [(116.3, 100, -90)]}),
+]
+
+
+def idea_items(moves):
+    out, used = [], {}
+    for k, x, z, r in EXAMPLE:
+        if k in moves:
+            i = used.get(k, 0)
+            used[k] = i + 1
+            if i < len(moves[k]):
+                out.append([k, *moves[k][i]])
+        else:
+            out.append([k, x, z, r])
+    return out
+
 
 def b64(arr):
     return base64.b64encode(np.ascontiguousarray(arr).tobytes()).decode('ascii')
@@ -576,7 +610,8 @@ def main():
     apt, a = apartment(plan)
     scene = dict(version=1, units='inches', wall_height=a.wall_height, sill=a.sill,  # full walls 7'6" (8' read too tall)
                  apartment=apt, plan=plan_data(plan), furniture=furniture_meshes(),
-                 example=[dict(k=k, x=x, z=z, r=r) for k, x, z, r in EXAMPLE])
+                 example=[dict(k=k, x=x, z=z, r=r) for k, x, z, r in EXAMPLE],
+                 ideas=[dict(name=n, note=note, items=idea_items(m)) for n, note, m in IDEAS])
     # Embedded in the page rather than fetched: a second request for a private artifact's file can fail in
     # browsers that block third-party cookies (it did on an iPad), so the page carries its own data.
     path = os.path.join(HERE, 'index.html')

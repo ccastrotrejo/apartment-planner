@@ -24,7 +24,8 @@ folder) and open `https://<you>.github.io/<repo>/web/`.
   translucent. **Standard / With guest** switch between the two layouts built into the page.
 - Red = overlapping a wall or another piece; amber = blocking a door swing. Selecting a piece shows its
   clearance to the nearest wall or piece in each direction.
-- **Layouts** saves layouts in your browser and shares them as a text "layout code" anyone can paste in.
+- **Layouts** opens ready-made layout ideas (desk at the corner window, sofa on the bedroom wall, bed on the
+  west wall, TV in the bedroom), saves layouts in your browser, and shares them as a text "layout code" anyone can paste in.
   (The page was built as a Claude artifact, where it can also share saved layouts between visitors through a
   database. On GitHub Pages or from a file, those features stay off and everything else works.)
 
@@ -51,7 +52,8 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
 3. **Website list: `web/export_web.py`.** `PIECES` gives each piece its name, group and color(s);
    `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south). Collisions use each
    piece's footprint rectangle; `FOOTPRINTS` in `furniture.py` overrides it (one rectangle per leg for the
-   L-shaped sectional, just the pot for plants).
+   L-shaped sectional, just the pot for plants). `IDEAS` lists alternative arrangements, each given as the
+   pieces it moves away from `EXAMPLE`; they appear under **Layout ideas** in the Layouts sheet.
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
    built-in Standard / With guest layouts with your `EXAMPLE`), then plain `python3 web/export_web.py` after
    each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.

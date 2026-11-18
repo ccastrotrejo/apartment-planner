@@ -209,6 +209,14 @@ def _ellipse(ru, rv, segs=40):
 UPPER_Y0, UPPER_Y1, UPPER_D = 54.0, 88.0, 13.0       # kitchen uppers (web only: drawn with full-height walls)
 
 
+def _backing(g, W, D, h, top=None):
+    """Matte panel closing the back of a kitchen run, floor to counter (and counter to the top of the uppers on the
+    web-only layer), so the run reads as finished casework when the wall is see-through. It reaches 0.05" into
+    the wall so nothing behind it is coplanar with its faces."""
+    g['backing'].append(_B(0, D - 0.3, 0, W, D + 0.05, h - 0.05))
+    g['upper_backing'].append(_B(0, D - 0.3, h - 0.05, W, D + 0.05, (top or UPPER_Y1) - 0.02))
+
+
 def _cabinets(g, W, D, h, sink=None, end_panel=None):
     """Handle-less slab base cabinets (greige wood) with a white quartz top, an optional undermount sink
     (local rect) and an optional wood end panel at an exposed end ('lo' = u 0, 'hi' = u W). Adds the
@@ -232,6 +240,7 @@ def _cabinets(g, W, D, h, sink=None, end_panel=None):
     g['countertop'].append(slab)
     g['upper_backsplash'].append(_B(0, D - 0.35, h, W, D, UPPER_Y0))
     _uppers(g, W, D, UPPER_Y0)
+    _backing(g, W, D, h)
     if sink:
         bowl = (_RS(su0 - 0.85, sv0 - 0.85, h - 8.6, su1 + 0.85, sv1 + 0.85, h - 1.15, 1.0)
                 - _RS(su0, sv0, h - 8.0, su1, sv1, h - 0.6, 0.8))
@@ -286,6 +295,7 @@ def _range(g, W, D, h):
     g['upper_fixture_metal'].append(F._tube([(W - 5.5, D - 15.4, UPPER_Y0 + 2.6), (W - 5.5, D - 16.6, UPPER_Y0 + 2.6),
                                              (W - 5.5, D - 16.6, UPPER_Y0 + 13.6), (W - 5.5, D - 15.4, UPPER_Y0 + 13.6)], 0.32))
     _uppers(g, W, D, UPPER_Y0 + 16.8)
+    _backing(g, W, D, h)
 
 
 def _fridge(g, W, D, h):
@@ -304,6 +314,7 @@ def _fridge(g, W, D, h):
         g['upper_cab_wood'].append(_B(u0, 0.0, h, u1, D, UPPER_Y1))
     g['upper_cab_wood'].append(_B(0.75, 0.8, h + 0.5, W - 0.75, D, UPPER_Y1))
     g['upper_cab_wood'].append(_B(0.82, 0.0, h + 0.6, W - 0.82, 0.82, UPPER_Y1 - 0.1))
+    _backing(g, W, D, h)
 
 
 def _vanity(g, W, D, h):
@@ -372,13 +383,13 @@ def _laundry(g, W, D, h):
 
 
 UPPER_KEYS = ('upper_cab_white', 'upper_cab_wood', 'upper_backsplash', 'upper_appliance', 'upper_fixture_dark',
-              'upper_fixture_metal')
+              'upper_fixture_metal', 'upper_backing')
 
 
 def web_fixtures(plan):
     """Detailed multi-material built-ins, keyed by fixture kind and placed by each fixture's front. upper_* layers
     (kitchen uppers, backsplash, microwave) rise above the 4' cut, so the page shows them with full walls only."""
-    keys = ('cab_wood', 'cab_white', 'countertop', 'ceramic', 'appliance', 'fixture_dark', 'fixture_metal') + UPPER_KEYS
+    keys = ('cab_wood', 'cab_white', 'countertop', 'ceramic', 'appliance', 'fixture_dark', 'fixture_metal', 'backing') + UPPER_KEYS
     g = {k: [] for k in keys}
     fixtures = list(plan.fixtures())
     doors = {d.get('name', ''): h for d, h, t, o, r in plan.doors()}

@@ -1,11 +1,13 @@
 # Apartment furniture planner
 
-A drag-and-drop furniture planner for one apartment, in a plan view and a 3D view, built from tape
-measurements. Everything is generated from Python: the floor plan, every piece of furniture, and the page
-itself (`web/index.html`, one self-contained file). The same geometry also comes out as 3D-printable STLs
-at 1:60.
+A drag-and-drop furniture planner for one apartment, in a plan view and a 3D view, built from the
+brochure plan (and, where you have them, tape measurements). Everything is generated from Python: the floor
+plan, every piece of furniture, and the page itself (`web/index.html`, one self-contained file). The same
+geometry also comes out as 3D-printable STLs at 1:60.
 
-This repo is the B7 floor plan and its furniture as an example. Fork it and swap in your own place.
+This repo is Residence A4 at Loden, Brooklyn (1 bed / 1 bath, 546 SF) and its furniture as an example. Fork it
+and swap in your own place. The furniture was read off a walkthrough video of the owner's current apartment,
+so its sizes are estimates until measured.
 
 ![The planner in 3D with see-through walls](docs/screenshot.png)
 
@@ -16,7 +18,7 @@ To share it, turn on GitHub Pages for your fork (Settings → Pages → deploy f
 folder) and open `https://<you>.github.io/<repo>/web/`.
 
 - Drag furniture in from the list; drag to move, R / Shift+R to rotate, F (or double-click) to switch
-  two-state pieces (sofa bed, drop-leaf table, a bike standing up, the dog curling up), Delete to remove,
+  two-state pieces (the lift-top coffee table), Delete to remove,
   Ctrl/Cmd+Z to undo.
 - **Lock** freezes the furniture so dragging only moves the camera. **See-through** makes the walls
   translucent. **Standard / With guest** switch between the two layouts built into the page.
@@ -31,9 +33,10 @@ folder) and open `https://<you>.github.io/<repo>/web/`.
 Install the dependencies once: `python3 -m pip install -r requirements.txt`.
 
 1. **Floor plan: `floorplan.py`.** All units are real inches; x runs east, y runs south.
-   - Every wall face is a named line. Its position comes from a tape measurement (`MEAS`: "from line a to
-     line b is N inches") or, for unmeasured lines, from pixel positions on a photo of the plan (`PX_X` /
-     `PX_Y`), scaled by the px-per-inch the measurements calibrate. `solve()` places them.
+   - Every wall face is a named line. Its position comes from a dimension (`MEAS`: "from line a to
+     line b is N inches", here the room sizes printed on the brochure) or, for unmeasured lines, from pixel
+     positions on an image of the plan (`PX_X` / `PX_Y`), scaled by the px-per-inch the dimensions calibrate.
+     `solve()` places them, interpolating unmeasured lines between the nearest measured ones.
    - `WALLS`, `WINDOWS`, `DOORS` (hinged, with swing), `SLIDERS`, `FIXTURES` (kitchen, baths) and `ROOMS`
      are lists of rectangles between those lines.
    - For a new place, the simplest start is to replace those lines and lists with your own: measure the
@@ -46,7 +49,9 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
    Pieces built with `parts=True` return colored parts for the website. Add new pieces to `WEB_ONLY` if you
    don't want to print them.
 3. **Website list: `web/export_web.py`.** `PIECES` gives each piece its name, group and color(s);
-   `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south).
+   `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south). Collisions use each
+   piece's footprint rectangle; `FOOTPRINTS` in `furniture.py` overrides it (one rectangle per leg for the
+   L-shaped sectional, just the pot for plants).
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
    built-in Standard / With guest layouts with your `EXAMPLE`), then plain `python3 web/export_web.py` after
    each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.

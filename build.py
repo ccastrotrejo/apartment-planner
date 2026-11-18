@@ -40,7 +40,7 @@ def fmt(inches):
 # ------------------------------------------------------------------------------------------
 class Plan:
     def __init__(self):
-        self.X, self.Y, self.how, self.bridge = fp.solve()
+        self.X, self.Y, self.how = fp.solve()
 
     def rect(self, r, frame=None):
         X, Y = self.X, self.Y
@@ -191,6 +191,11 @@ def fixture_details(plan, a, s):
         top = z(h)
         if kind == 'cabinets':
             doors(rect, f['front'], h)
+            if f.get('sink'):
+                sx0, sx1, sy0, sy1 = plan.rect(f['sink'], frame=f['rect'])
+                sink = box(sx0, sy0, sx1, sy1)
+                cuts.append((sink, top - min(7 * s, h * s - 1.0), top + 1))   # 7" deep bowl
+                marks.append(sink)
         elif kind == 'range':
             d, w = x1 - x0, y1 - y0                                # depth runs back (x0, wall) to front (x1)
             for cu in (0.33, 0.72):
@@ -387,7 +392,7 @@ def choose_cuts(plan, a, s, n, model):
 
     def ok(x):
         # walls/columns: crossing is fine if >= wall_min_mm stays on each side (never split one lengthwise);
-        # built-ins: only large ones (peninsula, tub) may be crossed, small ones (toilets, vanities) never
+        # built-ins: only large ones (counter runs, tub) may be crossed, small ones (toilets, vanities) never
         return (all(crossing_ok(x, b, a.wall_min_mm) for b in walls) and
                 all(crossing_ok(x, b, a.fixture_min_mm if (b[2] - b[0]) * s >= a.fixture_cuttable_mm else 1e9)
                     for b in fixtures))
@@ -463,18 +468,17 @@ def draw_plan(plan, a, path_png, path_svg):
     for w, g in plan.windows():
         if w['kind'] == 'full':
             ax.fill(*g.exterior.xy, color=GLASS_C, ec='#1d3557', lw=0.6, hatch='////', zorder=3)
+            x0, y0, x1, y1 = g.bounds
+            ax.text(x1 + 3, (y0 + y1) / 2, 'floor-to-ceiling', rotation=-90, fontsize=7.5,
+                    color='#1d3557', ha='left', va='center', zorder=7)
         else:
             ax.fill(*g.exterior.xy, color=WIN_C, ec='#457b9d', lw=0.6, zorder=3)
-    ax.text(X['E_out'] + 3, (Y['N_in'] + Y['pier_top']) / 2, 'floor-to-ceiling', rotation=-90, fontsize=7.5,
-            color='#1d3557', ha='left', va='center', zorder=7)
-    ax.text(X['E_out'] + 3, (Y['bed2_win_top'] + Y['bed2_win_bot']) / 2, 'floor-to-ceiling', rotation=-90,
-            fontsize=7.5, color='#1d3557', ha='left', va='center', zorder=7)
     for f, g in plan.fixtures():
         ax.fill(*g.exterior.xy, color='#dedede', ec='#6b6b6b', lw=0.7, zorder=2)
         c = g.centroid
         if g.area > 400:
             x0, y0, x1, y1 = g.bounds
-            txt = f"{f['name'].split(' ')[0]}\n{f['h']:.0f}\" tall" + (' (measured)' if f['name'] == 'peninsula' else '')
+            txt = f"{f['name'].split(' ')[0]}\n{f['h']:.0f}\" tall"
             ax.text(c.x, c.y, txt, fontsize=6.5, ha='center', va='center', color='#444', zorder=4)
     _, marks, glass = fixture_details(plan, a, 25.4 / a.scale)
     for g in marks:                                             # burners, sinks, tub basin
@@ -518,59 +522,33 @@ def draw_plan(plan, a, path_png, path_svg):
         v = abs((X if axis == 'x' else Y)[b_] - (X if axis == 'x' else Y)[a_])
         dim(ax, p0, p1, fmt(v), measured_between(axis, a_, b_) and not assumed, side=side, fs=fs)
 
-    # ---- your tape measurements (style is decided by measured_between, not by hand) ----
-    D('x', 'W_in', 'bed1_E', 14)                                  # 9'3"
-    D('y', 'N_in', 'bed1_S_in', 12)                               # 10'2"
-    D('y', 'N_in', 'cl1_stub1_bot', X['bed1_E'] - 6, side=-1)     # 3'11" wall before closet
-    D('x', 'W_in', 'bed1_S_end', Y['bed1_S_in'] - 6)              # 5'10"
-    D('x', 'W_in', 'stub_L', Y['bed1_S_out'] + 5, side=-1)        # 5'4"
-    D('y', 'bed1_S_out', 'stub_bot', X['stub_L'] - 3, side=-1)    # 10"
-    D('y', 'bed1_S_out', 'entry_top', 6)                          # 1'5"
-    D('y', 'bed1_S_out', 'hall_S', X['W_out'] - 12, side=-1)      # 4'9"
-    D('y', 'stub_bot', 'hall_S', X['stub_R'] + 8)                 # 3'11" hall width
-    D('y', 'closet_top', 'hall_S', X['closet_W_out'] - 4, side=-1)  # 3'11" closet side
-    D('x', 'pen_E', 'col_L', 22)                                  # 8'1.5"
-    D('x', 'col_L', 'col_R', Y['liv_col_bot'] + 5, side=-1)       # 2'3.5"
-    D('x', 'col_R', 'E_in', 22)                                   # 5'4"
-    D('x', 'livwin_R', 'col_L', 34, fs=7)                         # wall between window and column (photo est.)
-    D('x', 'col_R', 'livwin2_L', 34, fs=7)
-    D('y', 'N_in', 'bump_N', X['E_in'] - 8, side=-1)              # 8'5"
-    D('y', 'bump_N', 'liv_S', X['bump_W'] - 4, side=-1)           # 2'2"
-    D('x', 'bump_W', 'E_in', Y['bump_N'] - 5)                     # 2'8"
-    D('x', 'step_W', 'bump_W', Y['liv_S'] - 6)                    # 9'3"
-    D('x', 'bed2_W_in', 'block_W', Y['bed2_S_in'] - 8)            # 10'4"
-    D('x', 'block_W', 'E_in', Y['block_top'] - 6)                 # 1'2"
-    D('y', 'bed2_N', 'bed2_S_in', X['E_out'] + 16)                # 9'3"
-    D('y', 'bed2_N', 'block_top', X['E_in'] - 8, side=-1)         # 7'
-    D('x', 'pen_E', 'E_in', Y['N_out'] - 10)                      # 15'9" = sum of the three parts
+    # ---- brochure dimensions (style is decided by measured_between, not by hand) ----
+    D('x', 'W_in', 'part_W', Y['N_in'] + 10)                      # 10'9" living
+    D('y', 'N_in', 'liv_S', X['W_in'] + 8)                        # 15'11" living
+    D('x', 'bed_W', 'bed_E', Y['cap_bot'] + 10)                   # 9'0" bedroom
+    D('y', 'cap_bot', 'bed_S', X['bed_E'] - 8, side=-1)           # 10'0" bedroom
 
     # ---- estimated from the drawing ----
-    D('x', 'col_E', 'counter', Y['fridge_top'] - 14, fs=7)                      # counter depth
-    D('x', 'counter', 'pen_W', 30)                                              # kitchen aisle
-    D('y', 'N_in', 'fridge_top', X['counter'] + 5, fs=7)                        # counter run
-    D('x', 'pen_W', 'pen_E', Y['pen_bot'] + 6, side=-1)                         # peninsula
-    D('y', 'N_in', 'pen_bot', X['pen_W'] - 6, side=-1)
-    D('y', 'pen_bot', 'closet_top', X['pen_W'] + 24)                            # peninsula end to suite wall
-    D('y', 'N_in', 'liv_col_bot', X['col_R'] + 5, fs=7)                         # column depth
-    D('y', 'stub_bot', 'hall_S', (X['cl2_door_L'] + X['cl2_door_R']) / 2, assumed=True)  # hall width at hall closet
-    D('x', 'W_in', 'closet_W_out', Y['hall_S'] - 9, side=-1)                    # hall length
-    D('x', 'bath1_W_in', 'div_L', Y['bath_top_in'] + 9)                         # bath 1
-    D('y', 'bath_top_in', 'bath_S_in', X['bath1_W_in'] + 14)
-    D('x', 'div_R', 'bed2_W_out', Y['bath_top_in'] + 9)                         # bath 2
-    D('y', 'bath_top_in', 'bath_S_in', X['bed2_W_out'] - 7, side=-1)
-    D('x', 'wd_L_in', 'wd_R_in', Y['wd_in_bot'] - 5, fs=7)                      # W/D closet
-    D('y', 'bath_top_in', 'wd_in_bot', X['wd_L_in'] + 4, fs=7)
-    D('x', 'closet_E_out', 'bed2_W_out', Y['hall_S'] - 6)                       # suite vestibule
-    D('y', 'vest_wall_bot', 'hall_S', X['closet_E_out'] + 4)
-    D('x', 'W_in', 'E_in', Y['bath_S_out'] + 14, side=-1)                       # overall inside, E-W
-    ax.text((X['W_in'] + X['E_in']) / 2, Y['bath_S_out'] + 22, "bedroom 1 west wall to east windows (not measured; only matters for the hallway length)",
-            fontsize=7, color=EST_C, fontstyle='italic', ha='center', va='top')
+    D('x', 'kit_W_in', 'counter', Y['range_top'] - 14, fs=7)                    # counter depth
+    D('x', 'counter', 'core_W', Y['liv_S'] + 30)                                # kitchen aisle
+    D('y', 'liv_S', 'fridge_top', X['counter'] + 5, fs=7)                       # counter run
+    D('y', 'liv_S', 'S_in', X['core_W'] - 6, side=-1)                           # kitchen length
+    D('x', 'core_W_in', 'bath_E_in', Y['bath_N'] + 9)                           # bath
+    D('y', 'bath_N', 'bath_S', X['core_W_in'] + 8)
+    D('x', 'core_W_in', 'wd_E', Y['wd_S'] - 5, fs=7)                            # W/D closet
+    D('x', 'bed_W', 'bcl_W', Y['alc_S'] - 6)                                    # bedroom alcove
+    D('y', 'bed_S', 'alc_S', X['bed_W'] + 26)
+    D('x', 'bcl_W_in', 'bcl_E_in', Y['bed_S_out'] + 8, fs=7)                    # bedroom closet
+    D('y', 'cl_N', 'S_in', X['cl_E_in'] - 2, side=-1, fs=7)                     # hall closet
+    D('x', 'col_W', 'bed_W', Y['col_bot'] + 5, fs=7)                            # window-wall column
+    D('x', 'W_in', 'bed_E', Y['N_out'] - 10)                                    # overall inside, E-W
     fb = fpoly.bounds
     dim(ax, (fb[0] - 34, fb[1]), (fb[0] - 34, fb[3]), f'{fmt(fb[3] - fb[1])} overall, outside faces', False, side=-1)
-    # bath / W/D door openings (sliding/pocket), estimated
-    for name, xa, xb in (('bath 1', 'bath1_door_L', 'bath1_door_R'), ('bath 2', 'hinge', 'nub_L'), ('W/D', 'wd_door_L', 'wd_door_R')):
-        ax.text((X[xa] + X[xb]) / 2, Y['bath_top_in'] + 2.5, f'est. {fmt(X[xb] - X[xa])} opening', fontsize=6.5,
-                color=EST_C, fontstyle='italic', ha='center', va='top', zorder=7,
+    # sliding / bifold door openings, estimated
+    for sl in fp.SLIDERS:
+        (xa, _), (ya, yb) = sl['x'], sl['y']
+        ax.text(X[xa] - 2, (Y[ya] + Y[yb]) / 2, f"est. {fmt(Y[yb] - Y[ya])} opening", fontsize=6.5, rotation=90,
+                color=EST_C, fontstyle='italic', ha='right', va='center', zorder=7,
                 bbox=dict(fc='white', ec='none', pad=0.3, alpha=0.9))
 
     ax.set_aspect('equal')
@@ -578,18 +556,18 @@ def draw_plan(plan, a, path_png, path_svg):
     ax.axis('off')
     ax.set_xlim(fb[0] - 62, fb[2] + 40)
     ax.set_ylim(fb[3] + 44, fb[1] - 26)
-    sx, sy = fb[0] + 330, fb[3] + 34          # scale bar
+    sx, sy = fb[2] - 60, fb[3] + 34           # scale bar
     for k in range(0, 61, 12):
         ax.plot([sx + k, sx + k], [sy - 1.5, sy + 1.5], color=INK, lw=0.8)
     ax.plot([sx, sx + 60], [sy, sy], color=INK, lw=0.8)
     ax.text(sx + 30, sy + 3, '0 – 5 ft', fontsize=7.5, ha='center', va='top')
-    fig.text(0.012, 0.985, 'Residence B7: dimensions used in the 3D model',
+    fig.text(0.012, 0.985, 'Residence A4 (Loden, Brooklyn): dimensions used in the 3D model',
              fontsize=14, fontweight='bold', va='top')
-    fig.text(0.012, 0.958, "9'3\"  solid blue = your tape measurement (exact in the model)", color=MEAS_C,
+    fig.text(0.012, 0.958, "10'9\"  solid blue = dimension printed on the brochure (exact in the model)", color=MEAS_C,
              fontsize=10.5, fontweight='bold', va='top')
     fig.text(0.012, 0.938, "est. 3'6\"  dashed orange = estimated from the brochure drawing (re-measure at move-in)",
              color=EST_C, fontsize=10.5, fontstyle='italic', va='top')
-    fig.text(0.012, 0.918, 'Interior faces unless noted. Interior walls est. 5" thick. Hatched windows (east wall) are '
+    fig.text(0.012, 0.918, 'Interior faces unless noted. Interior walls est. 5" thick. Hatched windows are '
              'floor-to-ceiling; light-blue windows are drawn with the sill at 1/3 of the cut wall (stylized). '
              'Built-ins show real height.',
              color='#555', fontsize=9, va='top')
@@ -690,56 +668,52 @@ def report(plan, a, tm, size_mm, parts):
     L.append(f'# Build report: scale 1:{a.scale:g}, walls {fmt(a.wall_height)} high\n')
     L.append(f'Model footprint: **{size_mm[0]:.1f} × {size_mm[1]:.1f} mm**, height {size_mm[2]:.1f} mm '
              f'(1 ft = {304.8 / a.scale:.2f} mm). Watertight: {tm.is_watertight}.\n')
-    L.append(f'Windows: east wall (living room + bedroom 2) floor-to-ceiling, shown as a {a.glass_curb_mm:g} mm curb; '
-             f'the rest have a {fmt(a.sill)} sill, i.e. {a.sill / a.wall_height:.0%} of the cut wall. That is stylized: '
-             f'real sills sit at 1/4-1/3 of the ceiling height (about 27-36" if the ceilings are about 9\').\n')
+    L.append(f'Windows: ordinary windows have a {fmt(a.sill)} sill, i.e. {a.sill / a.wall_height:.0%} of the cut wall '
+             f'(stylized); floor-to-ceiling glass is shown as a {a.glass_curb_mm:g} mm curb.\n')
     L.append('| File | Size (mm) | Est. print time, MK3 0.30mm DRAFT (rough) |')
     L.append('|---|---|---|')
     for name, (w, d, hrs) in parts.items():
         L.append(f'| `{name}` | {w:.1f} × {d:.1f} | ~{hrs:.1f} h |')
-    L.append('\n## Your measurements vs. the model\n')
-    L.append('| # | What | Yours | Model | Use |')
+    L.append('\n## Brochure dimensions vs. the model\n')
+    L.append('| # | What | Brochure | Model | Use |')
     L.append('|---|---|---|---|---|')
     for k, m in fp.MEAS.items():
         D = X if m['axis'] == 'x' else Y
         model = D[m['b']] - D[m['a']]
         flag = '' if abs(model - m['inches']) < 0.25 else f" **(off {model - m['inches']:+.1f}\")**"
         L.append(f"| `{k}` | {m['note']} | {fmt(m['inches'])} | {fmt(model)}{flag} | {m['use']} |")
-    br = plan.bridge
-    L.append(f"\n**East–west total isn't measured.** Read along the window wall (through the kitchen) the drawing puts "
-             f"the east windows {fmt(br['via_kitchen'])} from bedroom 1's west wall; along the hallway it says "
-             f"{fmt(br['via_hall'])}. The model uses the average ({fmt(X['E_in'])}), so unmeasured widths in the "
-             f"middle of the plan (kitchen, baths, hall, closets) carry roughly ±{abs(br['via_kitchen'] - br['via_hall']) / 2:.0f}\" uncertainty.\n")
+    L.append('')
+    fpoly = plan.footprint()
+    walls = unary_union(plan.walls() + [g for _, g in plan.windows()])
+    glass = unary_union([g for _, g in plan.windows()]).buffer(6, join_style=2)
+    mid = unary_union([fpoly.buffer(-4, join_style=2), fpoly.intersection(glass)])    # ~8" walls, to their middle
+    L.append(f'**Area.** Brochure: {fp.TOTAL_SF} SF. Model: {fpoly.area / 144:.0f} SF to the outside wall faces, '
+             f'{mid.area / 144:.0f} SF to the middle of the shared walls (how listings usually count it), '
+             f'{fpoly.difference(walls).area / 144:.0f} SF of open floor.\n')
     L.append('## Inferred dimensions (from the drawing, NOT measured)\n')
+    fx = {f['name']: plan.rect(f['rect'], f.get('frame')) for f in fp.FIXTURES}
     rows = [
-        ('Kitchen aisle, counter edge to peninsula', X['pen_W'] - X['counter']),
-        ('Kitchen counter depth', X['counter'] - X['col_E']),
-        ('Kitchen counter run, north wall to fridge', Y['fridge_top'] - Y['N_in']),
-        ('Peninsula, east-west', X['pen_E'] - X['pen_W']),
-        ('Peninsula, north-south', Y['pen_bot'] - Y['N_in']),
-        ('Bath 1 interior, east-west', X['div_L'] - X['bath1_W_in']),
-        ('Bath 2 interior, east-west', X['bed2_W_out'] - X['div_R']),
-        ('Baths interior, north-south', Y['bath_S_in'] - Y['bath_top_in']),
-        ('Tub', None),
-        ('W/D closet interior', None),
-        ('Hall, bedroom-1 door wall to bath wall', Y['hall_S'] - Y['stub_bot']),
-        ('Hall length, foyer west wall to suite closet', X['closet_W_out'] - X['W_in']),
-        ('Suite vestibule, closet to bedroom 2 wall', X['bed2_W_out'] - X['closet_E_out']),
-        ('Entry door opening', Y['entry_bot'] - Y['entry_top']),
-        ('Bedroom 1 door opening', X['cl2_stub_L'] - X['stub_R']),
-        ('Bedroom 2 suite door opening', X['nub_L'] - X['hinge']),
-        ('Bedroom 1 closet (inside)', None),
-        ('Living column depth (from window wall)', Y['liv_col_bot'] - Y['N_in']),
-        ('Wall thickness, interior partitions', X['cl1_W_in'] - X['bed1_E']),
+        ('Kitchen aisle, counter edge to the bath/closet wall', X['core_W'] - X['counter']),
+        ('Kitchen counter depth', X['counter'] - X['kit_W_in']),
+        ('Kitchen counter + range run, living wall to fridge', Y['fridge_top'] - Y['liv_S']),
+        ('Kitchen length, living wall to entry wall', Y['S_in'] - Y['liv_S']),
+        ('Bath interior, east-west', X['bath_E_in'] - X['core_W_in']),
+        ('Bath interior, north-south', Y['bath_S'] - Y['bath_N']),
+        ('Tub', fx['tub']),
+        ('W/D closet interior', (X['core_W_in'], X['wd_E'], Y['alc_S_out'], Y['wd_S'])),
+        ('Bedroom closet (inside)', (X['bcl_W_in'], X['bcl_E_in'], Y['bed_S_out'], Y['alc_S'])),
+        ('Hall closet (inside)', (X['core_W_in'], X['cl_E_in'], Y['cl_N'], Y['S_in'])),
+        ('Bedroom alcove (door + closet), east-west', X['bcl_W'] - X['bed_W']),
+        ('Entry door opening', X['entry_R'] - X['entry_L']),
+        ('Bedroom door opening', Y['door_bot'] - Y['door_top']),
+        ('Window-wall column, east-west', X['bed_W'] - X['col_W']),
+        ('Window-wall column depth (from the windows)', Y['col_bot'] - Y['N_in']),
+        ('Wall thickness, living | bedroom partition', X['bed_W'] - X['part_W']),
     ]
     for label, v in rows:
-        if label == 'Tub':
-            x0, x1, y0, y1 = plan.rect(fp.FIXTURES[3]['rect'])
+        if isinstance(v, tuple):
+            x0, x1, y0, y1 = v
             L.append(f'- {label}: {fmt(x1 - x0)} × {fmt(y1 - y0)}')
-        elif label == 'W/D closet interior':
-            L.append(f"- {label}: {fmt(X['wd_R_in'] - X['wd_L_in'])} × {fmt(Y['wd_in_bot'] - Y['bath_top_in'])}")
-        elif label == 'Bedroom 1 closet (inside)':
-            L.append(f"- {label}: {fmt(X['cl1_E_in'] - X['cl1_W_in'])} deep × {fmt(Y['cl1_bot'] - Y['cl1_top'])} long")
         else:
             L.append(f'- {label}: {fmt(v)}')
     return '\n'.join(L) + '\n'
@@ -772,7 +746,7 @@ def main():
 
     plan = Plan()
     comps, model, T, s = build_model(plan, a)
-    tag = f'apartment-b7_1to{a.scale:g}'
+    tag = f'apartment-a4_1to{a.scale:g}'
     tm = to_trimesh(model)
     tm.export(os.path.join(OUT, f'{tag}.stl'))
     size = tm.extents
@@ -798,7 +772,7 @@ def main():
 
     draw_plan(plan, a, os.path.join(OUT, 'plan-dimensions.png'), os.path.join(OUT, 'plan-dimensions.svg'))
     meshes = [(to_trimesh(m), k) for k, m in comps.items()]
-    title = f'B7 at 1:{a.scale:g}: {size[0]:.0f} × {size[1]:.0f} mm, walls cut at {fmt(a.wall_height)}'
+    title = f'A4 at 1:{a.scale:g}: {size[0]:.0f} × {size[1]:.0f} mm, walls cut at {fmt(a.wall_height)}'
     render_preview(meshes, os.path.join(OUT, 'preview-3d.png'), title)
     render_preview(meshes, os.path.join(OUT, 'preview-3d-from-east.png'), title, azim=150, elev=42)
     gap = 10.0
@@ -820,9 +794,9 @@ def main():
             m = trim_x(m, kx0, kx1).trim_by_plane([0, 1, 0], ky0).trim_by_plane([0, -1, 0], -ky1)
             part.append((to_trimesh(m), k))
         render_preview(part, os.path.join(OUT, fname), title, width=1500, **view)
-    closeup('preview-kitchen.png', 'Kitchen detail', 'bed1_E', 'livwin_L', 'N_out', 'stub_bot', azim=-60, elev=38)
-    closeup('preview-baths.png', 'Baths seen from the hallway: main bath with shower (left), guest bath with tub (right)', 'wd_R_in', 'bath_E_out',
-            'stub_bot', 'bath_S_out', azim=200, elev=48)
+    closeup('preview-kitchen.png', 'Kitchen detail', 'kit_W_out', 'core_W_in', 'liv_S', 'S_out', azim=-60, elev=38)
+    closeup('preview-baths.png', 'Bath and W/D closet seen from the kitchen', 'core_W', 'chase_E', 'alc_S', 'S_out',
+            azim=200, elev=48)
     rep = report(plan, a, tm, size, parts)
     with open(os.path.join(OUT, 'report.md'), 'w') as f:
         f.write(rep)

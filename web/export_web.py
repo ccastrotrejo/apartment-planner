@@ -23,98 +23,60 @@ import furniture as F              # noqa: E402
 SCALE = 12
 
 # name, library group, color (one color, or {part: color} for pieces built in colored parts)
-STAND = {'tires': '#1b1b1b', 'kit': '#2e2e2e', 'stand': '#222222', 'red': '#c23a2e'}
-WARROAD, AVAIL = {'frame': '#3f6d6b', **STAND}, {'frame': '#6e5a86', **STAND}
-NALA = {'fur': '#1c1714', 'tan': '#a8642f', 'eye': '#2a160b', 'white': '#efe9e0', 'tag': '#b9bdc1'}
+TIRES = {'tires': '#1b1b1b', 'kit': '#2e2e2e'}
 PIECES = {
-    'sofa': ('Sofa (power recliner)', 'Living room', '#9b9a96'),
-    'yellow-loveseat': ('Yellow loveseat chair', 'Living room', '#d6a531'),
-    'coffee-table': ('Coffee table', 'Living room', '#7a4a2c'),
-    'tv-stand': ('TV on rolling stand', 'Living room', '#3b3d42'),
-    'white-dresser': ('White cabinet', 'Living room', '#ecebe6'),
-    'side-table': ('Round side table 24"', 'Living room', {'top': '#8f8d88', 'frame': '#262626'}),
-    'floor-lamp': ('Trilage floor lamp', 'Living room', '#4a4038'),
-    'plant': ('Bird of paradise', 'Living room', '#4f7a43'),
-    'bar-cart': ('Bar cart', 'Living room', {'frame': '#c8a548', 'glass': '#cfe3e6', 'casters': '#3a3a3a'}),
-    'dining-round-36': ('Round table 36"', 'Dining & kitchen', '#c49a6c'),
-    'dining-round-42': ('Round table 42"', 'Dining & kitchen', '#c49a6c'),
-    'dining-oval-42x60': ('Oval table 42 × 60"', 'Dining & kitchen', '#c49a6c'),
-    'dining-rect-30x48': ('Table 30 × 48"', 'Dining & kitchen', '#c49a6c'),
-    'dining-rect-36x60': ('Table 36 × 60"', 'Dining & kitchen', '#c49a6c'),
-    'dining-rect-36x78': ('Table 36 × 78" (leaf in)', 'Dining & kitchen', '#c49a6c'),
-    'drop-leaf-folded': ('Drop-leaf table (yours)', 'Dining & kitchen', {'top': '#f1efe9', 'wood': '#d8b98c'}),
-    'drop-leaf-open': ('Drop-leaf table (yours), open', 'Dining & kitchen', {'top': '#f1efe9', 'wood': '#d8b98c'}),
-    'dining-chair': ('Dining chair', 'Dining & kitchen', '#8c6a4a'),
-    'bar-stool': ('Bar stool', 'Dining & kitchen', {'seat': '#a7a7a2', 'chrome': '#cdd2d6'}),
-    'standing-desk': ('Standing desk', 'Office', '#b98f62'),
-    'office-chair': ('Aeron chair', 'Office', {'frame': '#232323', 'mesh': '#4a4e51'}),
-    'queen-bed': ('Queen bed', 'Bedrooms', '#c9c3b8'),
-    'nightstand': ('Nightstand (KULLEN)', 'Bedrooms', '#3b302b'),
-    'nightstand-fluted': ('Fluted nightstand, 3 drawers (Wayfair)', 'Bedrooms',
-                          {'body': '#c7a57c', 'drawers': '#d2b289', 'flutes': '#bf9b70', 'pulls': '#b8933f',
-                           'strip': '#f1efe9'}),
-    'dresser-main': ('Dresser 60" (planned)', 'Bedrooms', '#b59a7a'),
-    'dresser-guest': ('Dresser 52" (current)', 'Bedrooms', '#a3876a'),
-    'dresser-16': ('Long dresser 78.7", 16 drawers (Wayfair)', 'Bedrooms', '#ecebe6'),
-    'storklinta': ('IKEA STORKLINTA 3-drawer', 'Bedrooms', '#c9a979'),
-    'sofa-bed-folded': ('Achillas sofa bed', 'Bedrooms', '#7d8790'),
-    'sofa-bed-open': ('Achillas sofa bed, opened as a bed', 'Bedrooms', '#7d8790'),
-    'shoe-cabinet': ('Shoe cabinet', 'Entry & storage', {'body': '#f1f0ec', 'top': '#c8a57a', 'knobs': '#c79a4b'}),
-    'mirror-65': ('Floor mirror 24 × 65"', 'Entry & storage', {'frame': '#4e3d30', 'glass': '#d5e0e4'}),
-    'mirror-77': ('Floor mirror 24 × 77"', 'Entry & storage', {'frame': '#4e3d30', 'glass': '#d5e0e4'}),
-    'bike-warroad': ('Salsa Warroad 54 cm, in a floor stand', 'Entry & storage', WARROAD),
-    'bike-warroad-up': ('Salsa Warroad 54 cm, standing up in its stand', 'Entry & storage', WARROAD),
-    'bike-avail': ('Liv Avail, in a floor stand', 'Entry & storage', AVAIL),
-    'bike-avail-up': ('Liv Avail, standing up in its stand', 'Entry & storage', AVAIL),
-    'bike-on-wall-hook': ('Bike on a vertical wall hook', 'Entry & storage',
-                          {'frame': '#3f6d6b', 'tires': '#1b1b1b', 'kit': '#2e2e2e'}),
-    'dog-crate': ('Dog crate', 'Pet', {'wire': '#1e1e1e', 'tray': '#3a3a3a'}),
-    'dog': ('Nala', 'Pet', NALA),
-    'dog-curled': ('Nala, curled up asleep', 'Pet', NALA),
-    'dog-bed': ('Donut dog bed', 'Pet', {'plush': '#d3d0ca', 'cushion': '#c2beb7'}),
-    'rug-6x9': ('Rug 6 × 9\'', 'Rugs & markers', '#bdb7aa'),
-    'rug-8x10': ('Rug 8 × 10\'', 'Rugs & markers', '#aab2b6'),
-    'sofa-recline-zone': ('Recline zone (sofa footrests)', 'Rugs & markers', '#e3b98f'),
+    'sectional': ('Sectional, chaise on the left', 'Living room', {'upholstery': '#ece6da', 'legs': '#6b4a2f'}),
+    'coffee-table': ('Lift-top coffee table', 'Living room', {'top': '#8a5a36', 'body': '#6f4528'}),
+    'coffee-table-open': ('Lift-top coffee table, lifted', 'Living room', {'top': '#8a5a36', 'body': '#6f4528'}),
+    'tv-stand': ('TV on rolling stand', 'Living room', {'base': '#cbb08a', 'stand': '#eeece7', 'tv': '#1b1c1f'}),
+    'tier-shelf': ('3-tier side shelf', 'Living room', '#4a3426'),
+    'torchiere-lamp': ('Torchiere floor lamp', 'Living room', {'metal': '#c3c7cc', 'shade': '#f6f3ec'}),
+    'standing-desk': ('Standing desk + monitors', 'Office & kitchen', {'top': '#6d5c4c', 'frame': '#1f1f1f',
+                                                                      'screens': '#141518'}),
+    'office-chair': ('Aeron chair', 'Office & kitchen', {'frame': '#232323', 'mesh': '#4a4e51'}),
+    'counter-stool': ('Counter stool', 'Office & kitchen', {'shell': '#ece8e0', 'wood': '#7a5232', 'metal': '#1f1f1f'}),
+    'queen-bed': ('Queen bed', 'Bedroom', {'frame': '#3d4a3f', 'bedding': '#f3f1ec', 'pillows': '#c9cfd6',
+                                          'throw': '#8f9a8c'}),
+    'nightstand': ('Nightstand', 'Bedroom', '#5a4434'),
+    'tripod-lamp': ('Tripod floor lamp', 'Bedroom', {'legs': '#1d1d1d', 'shade': '#efe4c8'}),
+    'coat-rack': ('Coat rack', 'Entry & storage', '#8a5a33'),
+    'shoe-cabinet': ('Shoe cabinet (cane doors)', 'Entry & storage', {'wood': '#5b3f2c', 'cane': '#d8c39e',
+                                                                      'metal': '#222222'}),
+    'arched-mirror': ('Arched floor mirror', 'Entry & storage', {'frame': '#2a2a2a', 'glass': '#d5e0e4'}),
+    'hall-cabinet': ('Rounded 2-door cabinet', 'Entry & storage', {'wood': '#4b3527', 'pulls': '#c2a15a'}),
+    'bike-black': ('Black road bike', 'Entry & storage', {'frame': '#2c3027', **TIRES}),
+    'bike-red-wall': ('Red road bike on a wall rack', 'Entry & storage', {'frame': '#b8322a', **TIRES, 'rack': '#a0774c'}),
+    'rug-6x9': ('Rug 6 × 9\'', 'Rugs & plants', '#c9c8c3'),
+    'plant-monstera': ('Leafy plant (grey pot)', 'Rugs & plants', {'pot': '#a3a39f', 'leaf': '#3f6b3a'}),
+    'plant-zz': ('ZZ plant (terracotta pot)', 'Rugs & plants', {'pot': '#b5683f', 'leaf': '#2f5a2c'}),
 }
-FLAT = {'rug-6x9', 'rug-8x10', 'sofa-recline-zone'}           # lie under furniture, never collide with it
-SEATS = {'dining-chair', 'bar-stool', 'office-chair'}            # may tuck under tables and desks
-STACK = {'floor-lamp': ['side-table'], 'dog': ['dog-bed', 'dog-crate'], 'dog-curled': ['dog-bed', 'dog-crate']}   # may stand on these
+FLAT = {'rug-6x9'}                                               # lie under furniture, never collide with it
+SEATS = {'counter-stool', 'office-chair'}                        # may tuck under tables and desks
+STACK = {}                                                       # piece: [pieces it may stand on]
 SUPPORT = {k for v in STACK.values() for k in v}
-DECK = {'dog-bed': F.FURNITURE['dog-bed']['deck'],               # what stands on it sits this high (default: its top)
-        'dog-crate': 1.6}                                        # top of the crate's plastic tray (see dog_crate)
-SMOOTH = {'dog', 'dog-curled', 'dog-bed'}                        # organic shapes: smooth shading, not faceted
+DECK = {}                                                        # what stands on it sits this high (default: its top)
+SMOOTH = set()                                                   # organic shapes: smooth shading, not faceted
 # Two-state pieces: one library entry; the selected piece switches state (button, F key, double-click).
-# anchor 'back': the back edge stays put (the sofa bed opens forward); 'center': the middle stays put.
-VARIANTS = {'sofa-bed-folded': ('sofa-bed-open', 'Open into a bed', 'back', 'Opens forward to 61″ deep'),
-            'sofa-bed-open': ('sofa-bed-folded', 'Fold back into a sofa', 'back', None),
-            'drop-leaf-folded': ('drop-leaf-open', 'Open the leaves', 'center', 'Opens to a 40″ round'),
-            'drop-leaf-open': ('drop-leaf-folded', 'Fold the leaves down', 'center', None),
-            'bike-warroad': ('bike-warroad-up', 'Stand it up', 'pivot', 'Stands up in its stand: 37½″ × 17″, 5′7″ tall'),
-            'bike-warroad-up': ('bike-warroad', 'Lay it down', 'pivot', None),
-            'bike-avail': ('bike-avail-up', 'Stand it up', 'pivot', 'Stands up in its stand: 36½″ × 17″, 5′6″ tall'),
-            'bike-avail-up': ('bike-avail', 'Lay it down', 'pivot', None),
-            'dog': ('dog-curled', 'Curl up for a nap', 'center', 'Curls up to sleep · lies in the donut bed or her crate'),
-            'dog-curled': ('dog', 'Wake up', 'center', None)}
-LIBNOTE = {'nightstand-fluted': 'top at 23⅞″ inside a 3″ rim',
-           'mirror-65': '½″ thick · leans out about 6″ at the bottom', 'mirror-77': '1″ thick · leans out about 7″ at the bottom'}
-SRC = {'sofa-bed-folded': 'sofa-bed', 'sofa-bed-open': 'sofa-bed', 'drop-leaf-open': 'drop-leaf-table',
-       'drop-leaf-folded': 'drop-leaf-table', 'bike-on-wall-hook': 'bike-warroad', 'dog-curled': 'dog',
-       'bike-warroad-up': 'bike-warroad', 'bike-avail-up': 'bike-avail'}
-TUCK = {'dining-round-36', 'dining-round-42', 'dining-oval-42x60', 'dining-rect-30x48', 'dining-rect-36x60',
-        'dining-rect-36x78', 'standing-desk', 'coffee-table', 'drop-leaf-open', 'drop-leaf-folded'}
+# anchor 'back': the back edge stays put; 'center': the middle stays put.
+VARIANTS = {'coffee-table': ('coffee-table-open', 'Lift the top', 'back', 'Top lifts to 25″ and comes 8″ forward'),
+            'coffee-table-open': ('coffee-table', 'Lower the top', 'back', None)}
+LIBNOTE = {'arched-mirror': 'leans out about 6″ at the bottom', 'bike-red-wall': 'hangs with its wheels 30″ off the floor'}
+TUCK = {'standing-desk'}
 
 # Example layout (plan inches; r = degrees, 0 = front faces south, 90 = east, 180 = north, -90 = west).
 EXAMPLE = [
-    ('sofa', 340, 107, 180), ('coffee-table', 340, 62, 180), ('rug-6x9', 334, 72, 0),
-    ('tv-stand', 340, 23, 0), ('yellow-loveseat', 268, 83, 90), ('side-table', 288, 110, 0),
-    ('floor-lamp', 290.2, 113.5, 0), ('plant', 394, 112, 0), ('white-dresser', 282, 9, 0),
-    ('bar-stool', 256, 28, -90), ('bar-stool', 256, 56, -90),
-    ('shoe-cabinet', 30, 136.5, 0), ('mirror-77', 315, 136.1, 0), ('mirror-65', 62, 118.7, 180),
-    ('office-chair', 79, 50, 90),
-    ('dining-round-42', 413, 34, 0), ('dining-chair', 384, 34, 90), ('dining-chair', 413, 63, 180),
-    ('queen-bed', 342, 209.5, 90), ('nightstand', 308, 169, 90), ('dresser-16', 380, 140.6, 0),
-    ('sofa-bed-folded', 20.5, 61, 90), ('dresser-guest', 60, 9.5, 0), ('standing-desk', 98.5, 50, -90),
-    ('dog-bed', 98.5, 13.5, 0), ('dog-curled', 98.5, 13.5, 0),
+    # living area: sectional on the west wall (chaise to the south) facing the TV on the bedroom partition,
+    # desk under the north window, stools parked by the kitchen
+    ('sectional', 32, 120, 90), ('rug-6x9', 62, 104, 90), ('coffee-table', 64.5, 104, -90), ('tv-stand', 121, 104, -90),
+    ('tier-shelf', 123, 139, -90), ('torchiere-lamp', 11, 45, 0), ('plant-monstera', 14, 14, 0),
+    ('standing-desk', 57.5, 14.5, 0), ('office-chair', 57.5, 36, 180), ('plant-zz', 93, 9, 0),
+    ('counter-stool', 10, 181.5, 180), ('counter-stool', 29, 181.5, 180),
+    # entry and kitchen corridor: coat rack by the door, shoe cabinet and mirror on the bath-side wall
+    ('coat-rack', 72, 374, 0), ('shoe-cabinet', 120, 315, -90), ('arched-mirror', 121.4, 287, -90),
+    # primary bedroom: head of the bed on the east wall, nightstands both sides, bikes on the north and west walls
+    ('queen-bed', 200.9, 60, -90), ('nightstand', 233.55, 18.3, -90), ('nightstand', 233.55, 101.65, -90),
+    ('tripod-lamp', 215, 12, 0), ('bike-black', 172, 15.5, 0), ('bike-red-wall', 142.7, 75, 90),
+    ('hall-cabinet', 200, 117.35, 180),
 ]
 
 
@@ -155,23 +117,17 @@ def furniture_meshes():
     pieces = F.build_all(SCALE)
     out = {}
     for k, (name, group, color) in PIECES.items():
-        f = F.FURNITURE[SRC.get(k, k)]
+        f = F.FURNITURE[F.SRC.get(k, k)]
         if isinstance(color, dict):                         # built in colored parts
             parts = F.BUILDERS[k](f, s, parts=True)
         else:
-            man = pieces[k]
-            if k == 'tv-stand':
-                man = F.union([man, F.tv_on_stand(F.FURNITURE['tv-stand'], s)])
-            if k == 'coffee-table':
-                man = man.mirror([0, 0, 1]).translate([0, 0, F.FURNITURE[k]['h'] * s])
-            elif k.startswith('dining-') and k != 'dining-chair':
-                man = man.rotate([180, 0, 0]).translate([0, 0, F.FURNITURE[k]['h'] * s])
-            parts = [('main', man)]
+            parts = [('main', pieces[k])]
         pivot = [m for role, m in parts if role == 'pivot']         # where a two-state piece stays put
         arrs = [(role, *manifold_arrays(m)) for role, m in parts if role != 'pivot']
         allv = np.vstack([v for _, v, _ in arrs]) / s        # real inches; x width, y depth (front at 0), z up
         x0, y0, z0 = allv.min(axis=0)
         x1, y1, z1 = allv.max(axis=0)
+        z0 = min(z0, 0.0)                                   # wall-hung pieces keep their height off the floor
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         meshes = []
         for role, v, fc in arrs:
@@ -180,19 +136,14 @@ def furniture_meshes():
             w = np.column_stack([v[:, 0] - cx, v[:, 2] - z0, cy - v[:, 1]])
             meshes.append(dict(color=color[role] if isinstance(color, dict) else color, mesh=pack(w, fc)))
         W, D, H = x1 - x0, y1 - y0, z1 - z0
-        hit = [-W / 2, W / 2, -D / 2, D / 2]
-        if k == 'floor-lamp':
-            r = f['base_dia'] / 2
-            allm = np.vstack([v for _, v, _ in arrs]) / s
-            bx, by = allm[allm[:, 2] < z0 + 0.5].mean(axis=0)[:2]
-            hit = [bx - cx - r, bx - cx + r, cy - by - r, cy - by + r]
-        elif k == 'plant':
-            r = f['saucer_dia'] / 2
-            hit = [-r, r, -r, r]
+        rects = F.FOOTPRINTS[k](f) if k in F.FOOTPRINTS else [(x0, x1, y0, y1)]
+        hits = [[rx0 - cx, rx1 - cx, cy - ry1, cy - ry0] for rx0, rx1, ry0, ry1 in rects]   # local web axes
         swatch = color if isinstance(color, str) else next(iter(color.values()))
         out[k] = dict(name=name, group=group, color=swatch, size=[round(W, 1), round(D, 1), round(H, 1)],
-                      hit=[round(h, 2) for h in hit], flat=k in FLAT, seat=k in SEATS, tuck=k in TUCK,
+                      hit=[round(h, 2) for h in hits[0]], flat=k in FLAT, seat=k in SEATS, tuck=k in TUCK,
                       stack=STACK.get(k, False), support=k in SUPPORT, note=f.get('note', ''), parts=meshes)
+        if len(hits) > 1:
+            out[k]['hits'] = [[round(h, 2) for h in r] for r in hits]
         if pivot:
             pb = pivot[0].bounding_box()
             out[k]['pivot'] = [round((pb[0] + pb[3]) / 2 / s - cx, 2), round(cy - (pb[1] + pb[4]) / 2 / s, 2)]
@@ -242,7 +193,7 @@ def plan_data(plan):
             x0n, x1n, y0n, y1n = r['size']
             size = [round(X[x1n] - X[x0n], 1), round(Y[y1n] - Y[y0n], 1)]
             measured = bool(build.measured_between('x', x0n, x1n) and build.measured_between('y', y0n, y1n))
-        rooms.append(dict(name=r['name'].title().replace('Bedroom 2', 'Main bedroom').replace('Bedroom 1', 'Guest bedroom'),
+        rooms.append(dict(name=r['name'].capitalize(),
                           at=[round(x, 1), round(y, 1)], size=size, measured=measured))
     fx0, fz0, fx1, fz1 = plan.footprint().bounds
     return dict(bounds=[round(v, 1) for v in (fx0, fz0, fx1, fz1)],

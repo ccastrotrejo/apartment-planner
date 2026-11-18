@@ -392,7 +392,7 @@ def choose_cuts(plan, a, s, n, model):
 
     def ok(x):
         # walls/columns: crossing is fine if >= wall_min_mm stays on each side (never split one lengthwise);
-        # built-ins: only large ones (peninsula, tub) may be crossed, small ones (toilets, vanities) never
+        # built-ins: only large ones (counter runs, tub) may be crossed, small ones (toilets, vanities) never
         return (all(crossing_ok(x, b, a.wall_min_mm) for b in walls) and
                 all(crossing_ok(x, b, a.fixture_min_mm if (b[2] - b[0]) * s >= a.fixture_cuttable_mm else 1e9)
                     for b in fixtures))
@@ -478,7 +478,7 @@ def draw_plan(plan, a, path_png, path_svg):
         c = g.centroid
         if g.area > 400:
             x0, y0, x1, y1 = g.bounds
-            txt = f"{f['name'].split(' ')[0]}\n{f['h']:.0f}\" tall" + (' (measured)' if f['name'] == 'peninsula' else '')
+            txt = f"{f['name'].split(' ')[0]}\n{f['h']:.0f}\" tall"
             ax.text(c.x, c.y, txt, fontsize=6.5, ha='center', va='center', color='#444', zorder=4)
     _, marks, glass = fixture_details(plan, a, 25.4 / a.scale)
     for g in marks:                                             # burners, sinks, tub basin
@@ -546,7 +546,7 @@ def draw_plan(plan, a, path_png, path_svg):
     dim(ax, (fb[0] - 34, fb[1]), (fb[0] - 34, fb[3]), f'{fmt(fb[3] - fb[1])} overall, outside faces', False, side=-1)
     # sliding / bifold door openings, estimated
     for sl in fp.SLIDERS:
-        (xa, xb), (ya, yb) = sl['x'], sl['y']
+        (xa, _), (ya, yb) = sl['x'], sl['y']
         ax.text(X[xa] - 2, (Y[ya] + Y[yb]) / 2, f"est. {fmt(Y[yb] - Y[ya])} opening", fontsize=6.5, rotation=90,
                 color=EST_C, fontstyle='italic', ha='right', va='center', zorder=7,
                 bbox=dict(fc='white', ec='none', pad=0.3, alpha=0.9))

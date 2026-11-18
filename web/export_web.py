@@ -136,19 +136,13 @@ def furniture_meshes():
             w = np.column_stack([v[:, 0] - cx, v[:, 2] - z0, cy - v[:, 1]])
             meshes.append(dict(color=color[role] if isinstance(color, dict) else color, mesh=pack(w, fc)))
         W, D, H = x1 - x0, y1 - y0, z1 - z0
-        hit = [-W / 2, W / 2, -D / 2, D / 2]
-        if k.startswith('plant'):
-            r = f['saucer_dia'] / 2
-            hit = [-r, r, -r, r]
-        hits = None
-        if k == 'sectional':                                 # L-shaped: the seat run, plus the chaise reaching forward
-            zc = D / 2 - (f['chaise_d'] - f['d'])
-            hits = [[-W / 2, W / 2, -D / 2, zc], [-W / 2, -W / 2 + f['chaise_w'], zc, D / 2]]
+        rects = F.FOOTPRINTS[k](f) if k in F.FOOTPRINTS else [(x0, x1, y0, y1)]
+        hits = [[rx0 - cx, rx1 - cx, cy - ry1, cy - ry0] for rx0, rx1, ry0, ry1 in rects]   # local web axes
         swatch = color if isinstance(color, str) else next(iter(color.values()))
         out[k] = dict(name=name, group=group, color=swatch, size=[round(W, 1), round(D, 1), round(H, 1)],
-                      hit=[round(h, 2) for h in hit], flat=k in FLAT, seat=k in SEATS, tuck=k in TUCK,
+                      hit=[round(h, 2) for h in hits[0]], flat=k in FLAT, seat=k in SEATS, tuck=k in TUCK,
                       stack=STACK.get(k, False), support=k in SUPPORT, note=f.get('note', ''), parts=meshes)
-        if hits:
+        if len(hits) > 1:
             out[k]['hits'] = [[round(h, 2) for h in r] for r in hits]
         if pivot:
             pb = pivot[0].bounding_box()

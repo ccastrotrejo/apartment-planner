@@ -2,8 +2,8 @@
 
 A drag-and-drop furniture planner for one apartment, in a plan view and a 3D view, built from the
 brochure plan (and, where you have them, tape measurements). Everything is generated from Python: the floor
-plan, every piece of furniture, and the page itself (`web/index.html`, one self-contained file). The same geometry also comes out as 3D-printable STLs
-at 1:60.
+plan, every piece of furniture, and the page itself (`web/index.html`, one self-contained file). The same
+geometry also comes out as 3D-printable STLs at 1:60.
 
 This repo is Residence A4 at Loden, Brooklyn (1 bed / 1 bath, 546 SF) and its furniture as an example. Fork it
 and swap in your own place. The furniture was read off a walkthrough video of the owner's current apartment,
@@ -50,7 +50,8 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
    don't want to print them.
 3. **Website list: `web/export_web.py`.** `PIECES` gives each piece its name, group and color(s);
    `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south). Collisions use each
-   piece's footprint rectangle; an L-shaped piece (the sectional) lists one rectangle per leg in `hits`.
+   piece's footprint rectangle; `FOOTPRINTS` in `furniture.py` overrides it (one rectangle per leg for the
+   L-shaped sectional, just the pot for plants).
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
    built-in Standard / With guest layouts with your `EXAMPLE`), then plain `python3 web/export_web.py` after
    each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.

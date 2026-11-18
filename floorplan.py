@@ -84,10 +84,6 @@ def nx(pa, pb):
     return (pb - pa) / SCALE['x']
 
 
-def ny(pa, pb):
-    return (pb - pa) / SCALE['y']
-
-
 # --------------------------------------------------------------------------------------------
 # Solver: real position (inches) of every line, plus how it was obtained.
 # --------------------------------------------------------------------------------------------

@@ -105,18 +105,19 @@ def union(ms):
 
 
 # Each builder works in model mm with x = width, y = depth (front face at y = 0), z = up.
-
-
-# Each builder works in model mm with x = width, y = depth (front face at y = 0), z = up.
 def sectional(f, s, parts=False):
     """L-sectional: a sofa with a chaise on the left as you face it (x = 0) reaching forward to y = 0, a track arm
-    with a round bolster on the right, tufted seats (web only), cushion seams, short wood legs. Back at y = max."""
+    with a round bolster on the right, tufted seats (web only), cushion seams, short wood legs. Back at y = max.
+    The print stands on an inset plinth instead (the recess reads as the legs), so nothing floats."""
     W, H, sh = f['w'] * s, f['h'] * s, f['seat_h'] * s
     D, cw, cd = f['d'] * s, f['chaise_w'] * s, f['chaise_d'] * s
     bt, aw, ah, lh = f['back_t'] * s, f['arm_w'] * s, f['arm_h'] * s, f['leg_h'] * s
     y0 = cd - D                                                  # front of the sofa section
     body = union([cube(0, y0, lh, W - aw + 0.1, cd, sh), cube(0, 0, lh, cw, y0 + 0.1, sh),
                   cube(0, cd - bt, lh, W, cd, H), cube(W - aw, y0, lh, W, cd, ah)])
+    if not parts:                                                # L-shaped plinth, inset 0.8 mm all round
+        foot = m3d.CrossSection.square([W, D]).translate([0, y0]) + m3d.CrossSection.square([cw, cd])
+        body = union([body, foot.offset(-0.8, m3d.JoinType.Miter).extrude(lh + 0.05)])
     cuts = []
     for x in (cw, cw + (W - aw - cw) / 2):                       # seat cushion seams
         cuts.append(cube(x - GROOVE_W / 2, y0 - 0.1, sh - GROOVE_D, x + GROOVE_W / 2, cd - bt, sh + 1))
@@ -132,25 +133,31 @@ def sectional(f, s, parts=False):
     rb = 4 * s                                                   # bolster sunk a little into the arm, back and seat
     bolster = m3d.Manifold.cylinder(20 * s, rb, rb, 32).rotate([90, 0, 0]).translate([W - aw - rb + 0.3 * s, cd - bt + 0.1,
                                                                                        sh + rb - 0.3 * s])
-    lw, i = max(MIN_POST, 1.4 * s), 1.0 * s
+    upholstery = union([body - union(cuts), bolster])
+    if not parts:
+        return upholstery
+    lw, i = 1.4 * s, 1.0 * s
     legs = [cube(x, y, 0, x + lw, y + lw, lh + 0.05)
             for x, y in ((i, cd - i - lw), (W - i - lw, cd - i - lw), (W - i - lw, y0 + i), (i, i), (cw - i - lw, i))]
-    return _parts(parts, [('upholstery', union([body - union(cuts), bolster])), ('legs', union(legs))])
+    return [('upholstery', upholstery), ('legs', union(legs))]
 
 
 def lift_top_table(f, s, lifted=False, parts=False):
     """Lift-top coffee table: a storage box on four splayed legs. Closed, the top sits on the box; lifted, it rises on
-    two hinge arms and comes forward (toward the sofa, y = 0), opening the storage well."""
+    two hinge arms and comes forward (toward the sofa, y = 0), opening the storage well. The print (closed) stands on
+    its whole base instead, with a recessed band for the legs, so nothing floats."""
     W, D, H, lh, t = f['w'] * s, f['d'] * s, f['h'] * s, f['leg_h'] * s, f['top_t'] * s
-    box = cube(0, 0, lh, W, D, H - t + 0.05)
+    box = cube(0, 0, lh if parts else 0.0, W, D, H - t + 0.05)
     zt, dy = (f['lift_h'] * s, f['lift_fwd'] * s) if lifted else (H, 0)
     top = [cube(0, -dy, zt - t, W, D - dy, zt)]
     if lifted:
         box = box - cube(1.0 * s, 1.0 * s, lh + 2.0 * s, W - 1.0 * s, D - 1.0 * s, H)      # the storage well
-        for x in (3 * s, W - 3.6 * s):
+        for x in (0.9 * s, W - 1.5 * s):                         # against the well's side walls
             top.append(m3d.Manifold.batch_hull([cube(x, D * 0.55, H - t - 2 * s, x + 0.6 * s, D * 0.55 + 1.5 * s, H - t),
                                                 cube(x, D * 0.55 - dy, zt - t - 0.5 * s, x + 0.6 * s, D * 0.55 - dy + 1.5 * s, zt - t + 0.05)]))
-    lw, ins, out = max(MIN_POST, 1.5 * s), 1.5 * s, 1.0 * s
+    if not parts:
+        return union([box - union(_recessed_base(W, D, lh))] + top)
+    lw, ins, out = 1.5 * s, 1.5 * s, 1.0 * s
     legs = []
     for sx in (0, 1):
         for sy in (0, 1):
@@ -159,7 +166,7 @@ def lift_top_table(f, s, lifted=False, parts=False):
             ox, oy = (-out if not sx else out), (-out if not sy else out)
             legs.append(m3d.Manifold.batch_hull([cube(x, y, lh - 0.2, x + lw, y + lw, lh + 0.05),
                                                  cube(x + ox, y + oy, 0, x + ox + lw * 0.7, y + oy + lw * 0.7, 0.2)]))
-    return _parts(parts, [('top', union(top)), ('body', union([box] + legs))])
+    return [('top', union(top)), ('body', union([box] + legs))]
 
 
 def plant(f, s, parts=False):
@@ -295,20 +302,23 @@ def coat_rack(f, s):
 
 
 def cane_shoe_cabinet(f, s, parts=False):
-    """Slim shoe cabinet: wood case, three stacked tilt-out doors faced in cane, on four black metal legs."""
+    """Slim shoe cabinet: wood case, three stacked tilt-out doors faced in cane, on four black metal legs. The print
+    stands on its whole base instead, with a recessed band for the legs, so nothing floats."""
     W, D, H, lh, n = f['w'] * s, f['d'] * s, f['h'] * s, f['leg_h'] * s, f['doors']
-    t, gap = 0.75 * s, 0.2 * s
-    case = [cube(0, 0.6 * s, lh, W, D, H), cube(0, 0, lh, t, 0.65 * s, H), cube(W - t, 0, lh, W, 0.65 * s, H),
-            cube(0, 0, H - t, W, 0.65 * s, H), cube(0, 0, lh, W, 0.65 * s, lh + t)]
+    t, gap, zb = 0.75 * s, 0.2 * s, lh if parts else 0.0
+    case = [cube(0, 0.6 * s, zb, W, D, H), cube(0, 0, zb, t, 0.65 * s, H), cube(W - t, 0, zb, W, 0.65 * s, H),
+            cube(0, 0, H - t, W, 0.65 * s, H), cube(0, 0, zb, W, 0.65 * s, lh + t)]
     dh = (H - lh - 2 * t - gap * (n + 1)) / n
     cane = []
     for i in range(n):
         z0 = lh + t + gap + i * (dh + gap)
         case.append(cube(t + gap, 0.1 * s, z0, W - t - gap, 0.65 * s, z0 + dh))
         cane.append(cube(t + 1.6 * s, 0, z0 + 1.4 * s, W - t - 1.6 * s, 0.15 * s, z0 + dh - 1.4 * s))
-    lw = max(MIN_POST, 0.8 * s)
+    if not parts:
+        return union(case + cane) - union(_recessed_base(W, D, lh))
+    lw = 0.8 * s
     legs = [cube(x, y, 0, x + lw, y + lw, lh + 0.05) for x in (0.4 * s, W - 0.4 * s - lw) for y in (0.6 * s, D - 0.4 * s - lw)]
-    return _parts(parts, [('wood', union(case)), ('cane', union(cane)), ('metal', union(legs))])
+    return [('wood', union(case)), ('cane', union(cane)), ('metal', union(legs))]
 
 
 def _arch(w, h, segs=48):
@@ -531,16 +541,15 @@ def bike(f, s, wall_rack=False, parts=False):
     kit += [_tube([P(c + np.array([0, -1.8 * s, 0])), P(c + np.array([0, 1.8 * s, 0]))], 0.5 * s) for c in (R0, F0)]
     out = [('frame', union(frame)), ('tires', union(tires)), ('kit', union(kit))]
     if wall_rack:
-        lift = f['lift'] * s
-        out = [(k, m.translate([0, 0, lift])) for k, m in out]
         mx = (st_top[0] + ht_top[0]) / 2
-        z = (st_top[2] + ht_top[2]) / 2 + lift - 0.6 * s           # under the top tube, at mid length
+        z = (st_top[2] + ht_top[2]) / 2 - 0.6 * s                  # under the top tube, at mid length
         rack = [cube(mx - 5 * s, -2.5 * s, z - 3 * s, mx + 5 * s, bw + 1.0 * s, z),          # shelf to the wall
                 cube(mx - 5 * s, -2.5 * s, z - 3 * s, mx + 5 * s, -1.6 * s, z + 1.5 * s),     # front lip
                 cube(mx - 6 * s, bw + 0.2 * s, z - 8 * s, mx + 6 * s, bw + 1.0 * s, z + 2 * s)]  # wall plate
         out.append(('rack', union(rack)))
     b = union([m for _, m in out]).bounding_box()
-    return _parts(parts, [(k, m.translate([-b[0], -b[1], -b[2] + (lift if wall_rack else 0)])) for k, m in out])
+    lift = f['lift'] * s if wall_rack else 0.0
+    return _parts(parts, [(k, m.translate([-b[0], -b[1], lift - b[2]])) for k, m in out])
 
 
 BUILDERS = {
@@ -555,6 +564,20 @@ BUILDERS = {
     'queen-bed': queen_bed, 'nightstand': nightstand, 'tripod-lamp': tripod_lamp,
 }
 SRC = {'tv-55': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes
+
+
+def _pot(f):
+    return [(0, f['saucer_dia'], 0, f['saucer_dia'])]
+
+
+# Floor footprints for collisions where the bounding box is wrong: (x0, x1, y0, y1) rects in real inches, on the
+# builder's axes (x from the left, y from the front). An L-shaped piece lists one rect per leg; a plant's leaves
+# spread over other pieces, so only its pot counts.
+FOOTPRINTS = {
+    'sectional': lambda f: [(0, f['w'], f['chaise_d'] - f['d'], f['chaise_d']),        # seat run
+                            (0, f['chaise_w'], 0, f['chaise_d'] - f['d'])],             # chaise, reaching forward
+    'plant-monstera': _pot, 'plant-zz': _pot,
+}
 WEB_ONLY = {'coffee-table-open', 'tier-shelf', 'torchiere-lamp', 'plant-monstera', 'plant-zz', 'office-chair',
             'counter-stool', 'coat-rack', 'arched-mirror', 'bike-black', 'bike-red-wall', 'tripod-lamp'}   # not printed
 
@@ -599,7 +622,6 @@ TIME_CAL = 0.94                         # this estimator ran ~6% long vs PrusaSl
 def print_seconds(man, lh=LAYER_H, skin=0.6, infill=0.15, perims=2):
     """Rough slicer-style time for one piece (no heat-up, no layer changes: those are per plate). Same speeds
     as the apartment estimate in build.py: perimeters, solid skin within `skin` mm of a top/bottom, sparse infill."""
-    import shapely
     from shapely.geometry import Polygon
     from shapely.ops import unary_union
 

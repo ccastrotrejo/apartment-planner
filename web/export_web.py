@@ -15,7 +15,7 @@ import sys
 
 import manifold3d as m3d
 import numpy as np
-from shapely.geometry import LineString, Point, Polygon, box
+from shapely.geometry import LineString, box
 from shapely.ops import unary_union
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +23,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 import build                       # noqa: E402
 import floorplan as fp             # noqa: E402
 import furniture as F              # noqa: E402
+if __package__:
+    from .layout_check import WalkCheck, front_from  # noqa: E402
+else:
+    from layout_check import WalkCheck, front_from  # noqa: E402
 
 SCALE = 12
 
@@ -48,7 +52,8 @@ PIECES = {
                                                                       'metal': '#222222'}),
     'arched-mirror': ('Arched floor mirror', 'Entry & storage', {'frame': '#2a2a2a', 'glass': '#d5e0e4'}),
     'hall-cabinet': ('Rounded 2-door cabinet', 'Entry & storage', {'wood': '#4b3527', 'pulls': '#c2a15a'}),
-    'bike-black': ('Black road bike', 'Entry & storage', {'frame': '#2c3027', **TIRES}),
+    'bike-black': ('Black road bike on a wall rack', 'Entry & storage',
+                   {'frame': '#2c3027', **TIRES, 'rack': '#a0774c'}),
     'bike-red-wall': ('Red road bike on a wall rack', 'Entry & storage', {'frame': '#b8322a', **TIRES, 'rack': '#a0774c'}),
     'rug-6x9': ('Rug 6 × 9\'', 'Rugs & plants', '#c9c8c3'),
     'plant-monstera': ('Leafy plant (grey pot)', 'Rugs & plants', {'pot': '#a3a39f', 'leaf': '#3f6b3a'}),
@@ -170,12 +175,6 @@ def _local_rect(to_uv, r):
     """World rect (x0, z0, x1, z1) -> local (u0, v0, u1, v1)."""
     a, b = to_uv(r[0], r[1]), to_uv(r[2], r[3])
     return min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])
-
-
-def _face_from(center, toward):
-    """Compass side of `center` that faces the point `toward`."""
-    dx, dz = toward[0] - center[0], toward[1] - center[1]
-    return ('E' if dx > 0 else 'W') if abs(dx) >= abs(dz) else ('S' if dz > 0 else 'N')
 
 
 # Local-frame primitives (u, v, y in real inches)
@@ -440,13 +439,13 @@ def web_fixtures(plan):
             place(f['front'], b, lambda L, W, D, uv: _tub(L, W, D, h))
         elif kind == 'toilet' and tank:
             c = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
-            front = {'E': 'W', 'W': 'E', 'N': 'S', 'S': 'N'}[_face_from(c, ((tank[0] + tank[2]) / 2, (tank[1] + tank[3]) / 2))]
+            front = {'E': 'W', 'W': 'E', 'N': 'S', 'S': 'N'}[front_from(c, ((tank[0] + tank[2]) / 2, (tank[1] + tank[3]) / 2))]
             both = (min(b[0], tank[0]), min(b[1], tank[1]), max(b[2], tank[2]), max(b[3], tank[3]))
             place(front, both, lambda L, W, D, uv: _toilet(L, _local_rect(uv, b), _local_rect(uv, tank)))
         elif kind == 'appliance':
             c = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
             hinge = doors.get('W/D')
-            front = f.get('front') or (_face_from(c, hinge) if hinge is not None else 'S')
+            front = f.get('front') or (front_from(c, hinge) if hinge is not None else 'S')
             place(front, b, lambda L, W, D, uv: _laundry(L, W, D, h))
     return {k: F.union(ms) for k, ms in g.items() if ms}
 
@@ -627,134 +626,6 @@ def with_page_src(page):
                + SRC_OPEN + src + MAIN_OPEN + main_js + parts['post'])
     assert rebuilt == out, 'page-src does not rebuild the page'
     return out
-
-
-# ---- walkability check for the built-in layouts ----
-WALK_W = 30.0                       # clear walkway between rooms, doors and fixtures, in
-ACCESS_W = 24.0                     # clear space to get at a piece (beside a bed, in front of a cabinet), in
-FIXTURE_CLEAR = {'cabinets': 30, 'range': 30, 'fridge': 33, 'vanity': 21, 'toilet': 21, 'tub': 21, 'appliance': 30}
-# where each piece must be reachable from (local sides; front = the side it faces). Unlisted pieces need none.
-ACCESS = {'queen-bed': ('left', 'right'), 'sectional': ('front',), 'standing-desk': ('front',),
-          'shoe-cabinet': ('front',), 'hall-cabinet': ('front',), 'arched-mirror': ('front',),
-          'tier-shelf': ('front',), 'coat-rack': ('around',)}
-
-
-def _piece_rects(furn, k, x, z, r):
-    """World polygons of a placed piece's footprint (one per leg for L-shaped pieces)."""
-    f, t = furn[k], math.radians(r)
-    c, sn = math.cos(t), math.sin(t)
-    out = []
-    for a0, a1, b0, b1 in (f.get('hits') or [f['hit']]):
-        out.append(Polygon([(x + px * c + pz * sn, z - px * sn + pz * c) for px, pz in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))]))
-    return out
-
-
-def _local(furn, k, x, z, r, rect):
-    t = math.radians(r)
-    c, sn = math.cos(t), math.sin(t)
-    a0, a1, b0, b1 = rect
-    return Polygon([(x + px * c + pz * sn, z - px * sn + pz * c) for px, pz in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))])
-
-
-def _swing(d):
-    hx, hz = d['hinge']
-    a0 = math.atan2(d['closed'][1] - hz, d['closed'][0] - hx)
-    da = math.atan2(d['open'][1] - hz, d['open'][0] - hx) - a0
-    da = (da + math.pi) % (2 * math.pi) - math.pi
-    return Polygon([(hx, hz)] + [(hx + d['r'] * math.cos(a0 + da * i / 16), hz + d['r'] * math.sin(a0 + da * i / 16))
-                                 for i in range(17)])
-
-
-class WalkCheck:
-    """Checks a layout for blocked door swings, blocked fixture fronts, and 30" walkways to every door, fixture
-    and piece that needs reaching. Targets the empty apartment can't reach (tight closets) are not required."""
-
-    def __init__(self, plan, pdata, furn):
-        self.furn, self.r = furn, WALK_W / 2
-        self.base = plan.footprint().difference(unary_union(plan.walls() + [g for f, g in plan.fixtures()] +
-                                                             [g for w, g in plan.windows()]))
-        self.swings = [(d['name'], _swing(d)) for d in pdata['doors']]
-        self.zones, targets = [], []
-        fixtures = list(plan.fixtures())
-        tank = next((g.bounds for f, g in fixtures if 'tank' in f['name']), None)
-        hinges = {d['name']: d['hinge'] for d in pdata['doors']}
-        for f, g in fixtures:
-            kind = f.get('kind')
-            if kind not in FIXTURE_CLEAR:
-                continue
-            x0, z0, x1, z1 = g.bounds
-            c = ((x0 + x1) / 2, (z0 + z1) / 2)
-            front = f.get('front')
-            if kind == 'toilet' and tank:
-                front = {'E': 'W', 'W': 'E', 'N': 'S', 'S': 'N'}[_face_from(c, ((tank[0] + tank[2]) / 2, (tank[1] + tank[3]) / 2))]
-            if kind == 'appliance' and not front:
-                front = _face_from(c, hinges.get('W/D', c))
-            d = FIXTURE_CLEAR[kind]
-            zone = {'E': box(x1, z0, x1 + d, z1), 'W': box(x0 - d, z0, x0, z1),
-                    'N': box(x0, z0 - d, x1, z0), 'S': box(x0, z1, x1, z1 + d)}[front].intersection(self.base)
-            self.zones.append((f['name'], zone))
-            targets.append((f'the {f["name"]}', zone))
-        for d in pdata['doors']:                      # stand-in spots on both sides of every door leaf
-            (hx, hz), (cx_, cz_) = d['hinge'], d['closed']
-            mx, mz, L = (hx + cx_) / 2, (hz + cz_) / 2, math.hypot(cx_ - hx, cz_ - hz) or 1
-            nx, nz = -(cz_ - hz) / L, (cx_ - hx) / L
-            for sgn in (1, -1):
-                targets.append((f'the {d["name"]} door', Point(mx + sgn * 20 * nx, mz + sgn * 20 * nz).buffer(4)))
-        for path in pdata['sliders']:
-            (ax, az), (bx, bz) = path[0], path[-1]
-            mx, mz, L = (ax + bx) / 2, (az + bz) / 2, math.hypot(bx - ax, bz - az) or 1
-            nx, nz = -(bz - az) / L, (bx - ax) / L
-            for sgn in (1, -1):
-                targets.append(('the closet slider', Point(mx + sgn * 20 * nx, mz + sgn * 20 * nz).buffer(4)))
-        ex, ez = pdata['doors'][[d['name'] for d in pdata['doors']].index('entry')]['hinge']
-        self.entry = Point(ex - 19, ez - 20)
-        reach = self._reach(self.base)
-        self.targets = [(n, t) for n, t in targets if reach is not None and t.intersects(reach)]
-
-    def _reach(self, free, r=None):
-        r = r or self.r
-        core = free.buffer(-r)                    # round: the space a 30" wide person sweeps
-        parts = [core] if core.geom_type == 'Polygon' else list(getattr(core, 'geoms', []))
-        near = [g for g in parts if g.distance(self.entry) < r]
-        return min(near, key=lambda g: g.distance(self.entry)) if near else None
-
-    def problems(self, items):
-        out, polys = [], []
-        for k, x, z, r in items:
-            f = self.furn[k]
-            if f.get('flat'):
-                continue
-            ps = _piece_rects(self.furn, k, x, z, r)
-            if not f.get('seat'):                       # chairs and stools slide in and out; they don't wall off a path
-                polys += ps
-            for n, sw in self.swings:
-                if any(p.intersection(sw).area > 1.0 for p in ps):
-                    out.append(f'{f["name"]} blocks the {n} door swing')
-            for n, zone in self.zones:
-                if f.get('seat') and n == 'counter':
-                    continue
-                if any(p.intersection(zone).area > 1.0 for p in ps):
-                    out.append(f'{f["name"]} is in front of the {n}')
-        free = self.base.difference(unary_union(polys)) if polys else self.base
-        reach, near = self._reach(free), self._reach(free, ACCESS_W / 2)
-        if reach is None:
-            return out + ['no 30" path from the entry']
-        for n, t in self.targets:
-            if not t.intersects(reach):
-                out.append(f'no 30" path to {n}')
-        for k, x, z, r in items:
-            f = self.furn[k]
-            if k not in ACCESS:
-                continue
-            w, dpt = f['size'][0], f['size'][1]
-            sides = {'front': (-w * 0.35, w * 0.35, dpt / 2 + 1, dpt / 2 + 20), 'left': (-w / 2 - 20, -w / 2 - 1, -dpt * 0.25, dpt * 0.25),
-                     'right': (w / 2 + 1, w / 2 + 20, -dpt * 0.25, dpt * 0.25)}
-            for side in ACCESS[k]:
-                zone = (_local(self.furn, k, x, z, r, (-w / 2 - 20, w / 2 + 20, -dpt / 2 - 20, dpt / 2 + 20)) if side == 'around'
-                        else _local(self.furn, k, x, z, r, sides[side]))
-                if near is None or not zone.intersects(near):
-                    out.append(f'no 24" access to the {f["name"].lower()}' if side == 'around' else f'no 24" access to the {side} of the {f["name"].lower()}')
-        return sorted(set(out))
 
 
 def main():

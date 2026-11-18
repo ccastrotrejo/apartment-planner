@@ -71,7 +71,8 @@ FURNITURE = {
     'hall-cabinet': dict(w=31.5, d=15.7, h=31.5, r=3,
                          note='dark walnut 2-door cabinet with rounded corners and brass pulls (estimated)'),
     'bike-black': dict(wheelbase=39.6, wheel_d=27.2, tire=1.25, bars=16.5, seat_tube=21, stack=21.8, reach=15.2,
-                       saddle_z=37.5, note='black road bike, leans on a wall: about 67 x 17 x 40 in (estimated from '
+                       saddle_z=37.5, lift=30, note='black road bike, hung on the web plan and printable as a floor model: '
+                                           'about 67 x 17 x 40 in (estimated from '
                                            'typical 54 cm geometry)'),
     'bike-red-wall': dict(wheelbase=39.2, wheel_d=27.0, tire=1.0, bars=16.0, seat_tube=21.5, stack=21.0, reach=15.0,
                           saddle_z=37.0, lift=30,
@@ -128,12 +129,6 @@ def _rslab(x0, y0, z0, x1, y1, z1, rxy, rz=0.0, segs=16):
     return m3d.Manifold.batch_hull([mid, inner.extrude(0.02),
                                     inner.extrude(0.02).translate([0, 0, h - 0.02])]).translate(
         [(x0 + x1) / 2, (y0 + y1) / 2, z0])
-
-
-def _taper_leg(p0, p1, r0, r1, segs=12):
-    """Tapered round leg between two 3D points."""
-    return m3d.Manifold.batch_hull([m3d.Manifold.sphere(r0, segs).translate(list(p0)),
-                                    m3d.Manifold.sphere(r1, segs).translate(list(p1))])
 
 
 # Each builder works in model mm with x = width, y = depth (front face at y = 0), z = up.
@@ -592,7 +587,8 @@ BUILDERS = {
     'standing-desk': standing_desk, 'office-chair': office_chair, 'counter-stool': shell_stool,
     'coat-rack': coat_rack, 'shoe-cabinet': cane_shoe_cabinet, 'arched-mirror': arched_mirror,
     'hall-cabinet': round_cabinet,
-    'bike-black': bike, 'bike-red-wall': lambda f, s, parts=False: bike(f, s, wall_rack=True, parts=parts),
+    'bike-black': lambda f, s, parts=False: bike(f, s, wall_rack=parts, parts=parts),
+    'bike-red-wall': lambda f, s, parts=False: bike(f, s, wall_rack=True, parts=parts),
     'queen-bed': queen_bed, 'nightstand': nightstand, 'tripod-lamp': tripod_lamp,
 }
 SRC = {'tv-65': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes

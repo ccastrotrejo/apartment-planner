@@ -57,10 +57,13 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
    export, `WalkCheck` rejects a built-in layout that blocks a door swing, a fixture approach, a 30 inch
    circulation route, or 24 inch access beside the bed and in front of storage.
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
-   built-in Standard layout with your `EXAMPLE` and With guest with `EXAMPLE` adjusted by `GUEST`), then plain `python3 web/export_web.py` after
-   each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.
+   built-in Standard layout with your `EXAMPLE` and With guest with `EXAMPLE` adjusted by `GUEST`), then
+   plain `python3 web/export_web.py` after each change. It rewrites the data block inside `web/index.html`;
+   open or refresh the page to see it.
 5. **Printing (optional):** `python3 furniture.py` writes each piece and packed print plates to
    `output/furniture/` (1:60 by default; legs and thin parts are thickened so they print).
+6. **Tests:** `python3 -m unittest discover -s tests -v` checks the published layouts' circulation and
+   verifies that web-only furniture variants do not change printable geometry.
 
 ## Files
 

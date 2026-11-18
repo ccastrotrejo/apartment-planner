@@ -15,7 +15,7 @@ import sys
 
 import manifold3d as m3d
 import numpy as np
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -88,44 +88,38 @@ BATH_TILE = ('core_W_in', 'bath_E_in', 'bath_N', 'bath_S')        # walls tiled 
 
 # Example layout (plan inches; r = degrees, 0 = front faces south, 90 = east, 180 = north, -90 = west).
 EXAMPLE = [
-    # living area: sectional on the west wall (chaise to the south) facing the TV on the bedroom partition,
-    # desk under the north window, stools parked by the kitchen
-    ('sectional', 32, 120, 90), ('rug-6x9', 62, 104, 90), ('coffee-table', 64.5, 104, -90), ('tv-stand', 121, 104, -90),
-    ('tier-shelf', 123, 142, -90), ('torchiere-lamp', 11, 45, 0), ('plant-monstera', 14, 14, 0),
-    ('standing-desk', 57.5, 14.5, 0), ('office-chair', 57.5, 36, 180), ('plant-zz', 93, 9, 0),
-    ('counter-stool', 10, 181.5, 180), ('counter-stool', 29, 181.5, 180),
-    # entry and kitchen corridor: coat rack by the door, shoe cabinet and mirror on the bath-side wall
-    ('coat-rack', 72, 374, 0), ('shoe-cabinet', 120, 315, -90), ('arched-mirror', 121.4, 287, -90),
-    # primary bedroom: head of the bed on the east wall, nightstands both sides, bikes on the north and west walls
-    ('queen-bed', 200.9, 60, -90), ('nightstand', 233.55, 18.3, -90), ('nightstand', 233.55, 101.65, -90),
-    ('tripod-lamp', 215, 12, 0), ('bike-black', 172, 15.5, 0), ('bike-red-wall', 142.7, 75, 90),
-    ('hall-cabinet', 200, 117.35, 180),
+    # A 30 in route runs from the entry around the island, through both rooms, and to every door and fixture.
+    ('sectional', 32, 120, 90), ('rug-6x9', 62, 104, 90), ('coffee-table', 64.5, 104, -90),
+    ('tv-stand', 121, 104, -90), ('standing-desk', 57.5, 14.5, 0), ('office-chair', 57.5, 36, 180),
+    ('queen-bed', 201.2, 62.9, -90), ('nightstand', 233.85, 22.2, -90),
+    ('nightstand', 233.85, 103.6, -90),
+    # Storage and bikes sit out of the circulation route. The stools line the living-side partition wall.
+    ('bike-red-wall', 116.25, 310, -90), ('bike-black', 48, 182, 180),
+    ('shoe-cabinet', 67.5, 367.5, 90), ('coat-rack', 117, 236, 0), ('arched-mirror', 137.25, 137, 90),
+    ('hall-cabinet', 121, 59, -90), ('tier-shelf', 104, 42.5, 0),
+    ('counter-stool', 70.75, 200, 90), ('counter-stool', 70.75, 218, 90),
+    ('torchiere-lamp', 11, 45, 0), ('tripod-lamp', 217.7, 9, 0),
+    ('plant-monstera', 14, 6, 0), ('plant-zz', 93, 5, 0),
 ]
 
 # Layout ideas shown in the page's Layouts sheet: each starts from EXAMPLE and moves some pieces
-# ({piece: [(x, z, r), ...]} replaces that piece's placements in order). All are collision-free.
+# ({piece: [(x, z, r), ...]} replaces that piece's placements in order). Empty lists remove a piece.
+# Each idea keeps clear door swings, fixture approach zones, a 30 in circulation route, and 24 in local access.
 IDEAS = [
     ('Desk at the corner window', 'Standing desk turned to face the west window; the north window stays open '
      'for plants and the lamp.',
-     {'standing-desk': [(16.9, 27.6, 90)], 'office-chair': [(44.5, 27.6, -90)], 'plant-monstera': [(97, 16, 0)],
-      'plant-zz': [(16, 63, 0)], 'torchiere-lamp': [(70, 9, 0)]}),
-    ('Sofa on the bedroom wall', 'Living room flipped: the sectional backs onto the bedroom partition and the TV '
-     'rolls to the west wall.',
-     {'sectional': [(93, 120, -90)], 'rug-6x9': [(63, 112, 90)], 'coffee-table': [(48, 112, 90)],
-      'tv-stand': [(8, 112, 90)], 'tier-shelf': [(7, 152, 90)], 'torchiere-lamp': [(116, 60, 0)]}),
-    ('Bed on the west wall', 'Bed head on the bedroom\'s west wall, facing east; bikes move to the window and '
-     'the east wall.',
-     {'queen-bed': [(174.2, 66, 90)], 'nightstand': [(141.55, 24.3, 90), (141.55, 107.7, 90)],
-      'tripod-lamp': [(158.5, 21, 0)], 'bike-black': [(207, 9, 0)], 'bike-red-wall': [(233, 60, -90)],
-      'hall-cabinet': [(215, 117.35, 180)]}),
-    ('TV in the bedroom', 'The TV rolls to the foot of the bed; the red bike hangs on the living partition and '
-     'the living room becomes a lounge.',
-     {'tv-stand': [(141.7, 60, 90)], 'bike-red-wall': [(116.3, 100, -90)]}),
+     {'standing-desk': [(16.9, 27.6, 90)], 'office-chair': [(44.5, 27.6, -90)],
+      'torchiere-lamp': [(65, 9, 0)], 'plant-monstera': [(37, 6, 0)]}),
+    ('Open lounge', 'The coffee table, rug, and side shelf are removed for the widest uninterrupted circulation '
+     'and a clear center floor.',
+     {'coffee-table': [], 'rug-6x9': [], 'tier-shelf': []}),
+    ('Guest ready', 'The coffee table is stored away so the sectional can be used as a bed, and the desk chair '
+     'is tucked under the desk.',
+     {'coffee-table': [], 'office-chair': [(57.5, 24, 180)]}),
 ]
 
-# The built-in "With guest" layout: a guest sleeps on the sectional, so the coffee table rolls east to clear a
-# walkway beside it and the desk chair tucks under the desk. Everything else matches EXAMPLE.
-GUEST = {'coffee-table': [(92, 104, -90)], 'office-chair': [(57.5, 24, 180)]}
+# The built-in "With guest" layout clears the sectional fully by storing the coffee table away.
+GUEST = {'coffee-table': [], 'office-chair': [(57.5, 24, 180)]}
 
 
 def idea_items(moves):
@@ -635,6 +629,134 @@ def with_page_src(page):
     return out
 
 
+# ---- walkability check for the built-in layouts ----
+WALK_W = 30.0                       # clear walkway between rooms, doors and fixtures, in
+ACCESS_W = 24.0                     # clear space to get at a piece (beside a bed, in front of a cabinet), in
+FIXTURE_CLEAR = {'cabinets': 30, 'range': 30, 'fridge': 33, 'vanity': 21, 'toilet': 21, 'tub': 21, 'appliance': 30}
+# where each piece must be reachable from (local sides; front = the side it faces). Unlisted pieces need none.
+ACCESS = {'queen-bed': ('left', 'right'), 'sectional': ('front',), 'standing-desk': ('front',),
+          'shoe-cabinet': ('front',), 'hall-cabinet': ('front',), 'arched-mirror': ('front',),
+          'tier-shelf': ('front',), 'coat-rack': ('around',)}
+
+
+def _piece_rects(furn, k, x, z, r):
+    """World polygons of a placed piece's footprint (one per leg for L-shaped pieces)."""
+    f, t = furn[k], math.radians(r)
+    c, sn = math.cos(t), math.sin(t)
+    out = []
+    for a0, a1, b0, b1 in (f.get('hits') or [f['hit']]):
+        out.append(Polygon([(x + px * c + pz * sn, z - px * sn + pz * c) for px, pz in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))]))
+    return out
+
+
+def _local(furn, k, x, z, r, rect):
+    t = math.radians(r)
+    c, sn = math.cos(t), math.sin(t)
+    a0, a1, b0, b1 = rect
+    return Polygon([(x + px * c + pz * sn, z - px * sn + pz * c) for px, pz in ((a0, b0), (a1, b0), (a1, b1), (a0, b1))])
+
+
+def _swing(d):
+    hx, hz = d['hinge']
+    a0 = math.atan2(d['closed'][1] - hz, d['closed'][0] - hx)
+    da = math.atan2(d['open'][1] - hz, d['open'][0] - hx) - a0
+    da = (da + math.pi) % (2 * math.pi) - math.pi
+    return Polygon([(hx, hz)] + [(hx + d['r'] * math.cos(a0 + da * i / 16), hz + d['r'] * math.sin(a0 + da * i / 16))
+                                 for i in range(17)])
+
+
+class WalkCheck:
+    """Checks a layout for blocked door swings, blocked fixture fronts, and 30" walkways to every door, fixture
+    and piece that needs reaching. Targets the empty apartment can't reach (tight closets) are not required."""
+
+    def __init__(self, plan, pdata, furn):
+        self.furn, self.r = furn, WALK_W / 2
+        self.base = plan.footprint().difference(unary_union(plan.walls() + [g for f, g in plan.fixtures()] +
+                                                             [g for w, g in plan.windows()]))
+        self.swings = [(d['name'], _swing(d)) for d in pdata['doors']]
+        self.zones, targets = [], []
+        fixtures = list(plan.fixtures())
+        tank = next((g.bounds for f, g in fixtures if 'tank' in f['name']), None)
+        hinges = {d['name']: d['hinge'] for d in pdata['doors']}
+        for f, g in fixtures:
+            kind = f.get('kind')
+            if kind not in FIXTURE_CLEAR:
+                continue
+            x0, z0, x1, z1 = g.bounds
+            c = ((x0 + x1) / 2, (z0 + z1) / 2)
+            front = f.get('front')
+            if kind == 'toilet' and tank:
+                front = {'E': 'W', 'W': 'E', 'N': 'S', 'S': 'N'}[_face_from(c, ((tank[0] + tank[2]) / 2, (tank[1] + tank[3]) / 2))]
+            if kind == 'appliance' and not front:
+                front = _face_from(c, hinges.get('W/D', c))
+            d = FIXTURE_CLEAR[kind]
+            zone = {'E': box(x1, z0, x1 + d, z1), 'W': box(x0 - d, z0, x0, z1),
+                    'N': box(x0, z0 - d, x1, z0), 'S': box(x0, z1, x1, z1 + d)}[front].intersection(self.base)
+            self.zones.append((f['name'], zone))
+            targets.append((f'the {f["name"]}', zone))
+        for d in pdata['doors']:                      # stand-in spots on both sides of every door leaf
+            (hx, hz), (cx_, cz_) = d['hinge'], d['closed']
+            mx, mz, L = (hx + cx_) / 2, (hz + cz_) / 2, math.hypot(cx_ - hx, cz_ - hz) or 1
+            nx, nz = -(cz_ - hz) / L, (cx_ - hx) / L
+            for sgn in (1, -1):
+                targets.append((f'the {d["name"]} door', Point(mx + sgn * 20 * nx, mz + sgn * 20 * nz).buffer(4)))
+        for path in pdata['sliders']:
+            (ax, az), (bx, bz) = path[0], path[-1]
+            mx, mz, L = (ax + bx) / 2, (az + bz) / 2, math.hypot(bx - ax, bz - az) or 1
+            nx, nz = -(bz - az) / L, (bx - ax) / L
+            for sgn in (1, -1):
+                targets.append(('the closet slider', Point(mx + sgn * 20 * nx, mz + sgn * 20 * nz).buffer(4)))
+        ex, ez = pdata['doors'][[d['name'] for d in pdata['doors']].index('entry')]['hinge']
+        self.entry = Point(ex - 19, ez - 20)
+        reach = self._reach(self.base)
+        self.targets = [(n, t) for n, t in targets if reach is not None and t.intersects(reach)]
+
+    def _reach(self, free, r=None):
+        r = r or self.r
+        core = free.buffer(-r)                    # round: the space a 30" wide person sweeps
+        parts = [core] if core.geom_type == 'Polygon' else list(getattr(core, 'geoms', []))
+        near = [g for g in parts if g.distance(self.entry) < r]
+        return min(near, key=lambda g: g.distance(self.entry)) if near else None
+
+    def problems(self, items):
+        out, polys = [], []
+        for k, x, z, r in items:
+            f = self.furn[k]
+            if f.get('flat'):
+                continue
+            ps = _piece_rects(self.furn, k, x, z, r)
+            if not f.get('seat'):                       # chairs and stools slide in and out; they don't wall off a path
+                polys += ps
+            for n, sw in self.swings:
+                if any(p.intersection(sw).area > 1.0 for p in ps):
+                    out.append(f'{f["name"]} blocks the {n} door swing')
+            for n, zone in self.zones:
+                if f.get('seat') and n == 'counter':
+                    continue
+                if any(p.intersection(zone).area > 1.0 for p in ps):
+                    out.append(f'{f["name"]} is in front of the {n}')
+        free = self.base.difference(unary_union(polys)) if polys else self.base
+        reach, near = self._reach(free), self._reach(free, ACCESS_W / 2)
+        if reach is None:
+            return out + ['no 30" path from the entry']
+        for n, t in self.targets:
+            if not t.intersects(reach):
+                out.append(f'no 30" path to {n}')
+        for k, x, z, r in items:
+            f = self.furn[k]
+            if k not in ACCESS:
+                continue
+            w, dpt = f['size'][0], f['size'][1]
+            sides = {'front': (-w * 0.35, w * 0.35, dpt / 2 + 1, dpt / 2 + 20), 'left': (-w / 2 - 20, -w / 2 - 1, -dpt * 0.25, dpt * 0.25),
+                     'right': (w / 2 + 1, w / 2 + 20, -dpt * 0.25, dpt * 0.25)}
+            for side in ACCESS[k]:
+                zone = (_local(self.furn, k, x, z, r, (-w / 2 - 20, w / 2 + 20, -dpt / 2 - 20, dpt / 2 + 20)) if side == 'around'
+                        else _local(self.furn, k, x, z, r, sides[side]))
+                if near is None or not zone.intersects(near):
+                    out.append(f'no 24" access to the {f["name"].lower()}' if side == 'around' else f'no 24" access to the {side} of the {f["name"].lower()}')
+        return sorted(set(out))
+
+
 def main():
     ap = argparse.ArgumentParser(description='Rebuild the scene data embedded in web/index.html.')
     ap.add_argument('--reset-layouts', action='store_true',
@@ -661,6 +783,13 @@ def main():
                      guest=dict(name='With Guest', at=0, items=idea_items(GUEST)))
     else:
         scene.update({k: old[k] for k in ('main', 'guest') if k in old})
+    wc = WalkCheck(plan, scene['plan'], scene['furniture'])
+    layouts = ([('Standard', scene['main']['items']), ('With guest', scene['guest']['items'])] if 'main' in scene else [])
+    layouts += [(i['name'], i['items']) for i in scene['ideas']]
+    failures = [(name, msg) for name, items in layouts for msg in wc.problems([tuple(it) for it in items])]
+    if failures:
+        details = '\n'.join(f'- {name}: {msg}' for name, msg in failures)
+        raise ValueError(f'built-in layouts must have clear circulation:\n{details}')
     blob = json.dumps(scene, separators=(',', ':')).replace('<', '\\u003c')
     page = with_page_src(page[:a] + SCENE_OPEN + blob + page[b:])
     with open(path, 'w', encoding='utf-8') as fh:

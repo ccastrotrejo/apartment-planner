@@ -105,16 +105,14 @@ TUCK = {'dining-round-36', 'dining-round-42', 'dining-oval-42x60', 'dining-rect-
 
 # Example layout (plan inches; r = degrees, 0 = front faces south, 90 = east, 180 = north, -90 = west).
 EXAMPLE = [
-    ('sofa', 340, 107, 180), ('coffee-table', 340, 62, 180), ('rug-6x9', 334, 72, 0),
-    ('tv-stand', 340, 23, 0), ('yellow-loveseat', 268, 83, 90), ('side-table', 288, 110, 0),
-    ('floor-lamp', 290.2, 113.5, 0), ('plant', 394, 112, 0), ('white-dresser', 282, 9, 0),
-    ('bar-stool', 256, 28, -90), ('bar-stool', 256, 56, -90),
-    ('shoe-cabinet', 30, 136.5, 0), ('mirror-77', 315, 136.1, 0), ('mirror-65', 62, 118.7, 180),
-    ('office-chair', 79, 50, 90),
-    ('dining-round-42', 413, 34, 0), ('dining-chair', 384, 34, 90), ('dining-chair', 413, 63, 180),
-    ('queen-bed', 342, 209.5, 90), ('nightstand', 308, 169, 90), ('dresser-16', 380, 140.6, 0),
-    ('sofa-bed-folded', 20.5, 61, 90), ('dresser-guest', 60, 9.5, 0), ('standing-desk', 98.5, 50, -90),
-    ('dog-bed', 98.5, 13.5, 0), ('dog-curled', 98.5, 13.5, 0),
+    # living area: sofa on the west wall facing the TV on the bedroom partition, dining by the corner window
+    ('sofa', 20, 100, 90), ('rug-6x9', 58, 100, 90), ('coffee-table', 64, 100, 90), ('tv-stand', 120.5, 100, -90),
+    ('side-table', 16, 48, 0), ('floor-lamp', 18.2, 51.5, 0), ('plant', 10, 150, 0),
+    ('dining-round-36', 60, 26, 0), ('dining-chair', 31.5, 26, 90), ('dining-chair', 88.5, 26, -90),
+    ('shoe-cabinet', 18, 185.5, 180), ('dog-bed', 112, 165, 0), ('dog-curled', 112, 165, 0),
+    # primary bedroom: headboard on the south wall, dresser under the windows
+    ('queen-bed', 187.7, 84.3, 180), ('nightstand', 146.7, 116.8, 180), ('nightstand', 228.7, 116.8, 180),
+    ('dresser-main', 197, 10, 0),
 ]
 
 
@@ -242,7 +240,7 @@ def plan_data(plan):
             x0n, x1n, y0n, y1n = r['size']
             size = [round(X[x1n] - X[x0n], 1), round(Y[y1n] - Y[y0n], 1)]
             measured = bool(build.measured_between('x', x0n, x1n) and build.measured_between('y', y0n, y1n))
-        rooms.append(dict(name=r['name'].title().replace('Bedroom 2', 'Main bedroom').replace('Bedroom 1', 'Guest bedroom'),
+        rooms.append(dict(name=r['name'].capitalize(),
                           at=[round(x, 1), round(y, 1)], size=size, measured=measured))
     fx0, fz0, fx1, fz1 = plan.footprint().bounds
     return dict(bounds=[round(v, 1) for v in (fx0, fz0, fx1, fz1)],

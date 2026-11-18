@@ -1,11 +1,12 @@
 # Apartment furniture planner
 
-A drag-and-drop furniture planner for one apartment, in a plan view and a 3D view, built from tape
-measurements. Everything is generated from Python: the floor plan, every piece of furniture, and the page
-itself (`web/index.html`, one self-contained file). The same geometry also comes out as 3D-printable STLs
+A drag-and-drop furniture planner for one apartment, in a plan view and a 3D view, built from the
+brochure plan (and, where you have them, tape measurements). Everything is generated from Python: the floor
+plan, every piece of furniture, and the page itself (`web/index.html`, one self-contained file). The same geometry also comes out as 3D-printable STLs
 at 1:60.
 
-This repo is the B7 floor plan and its furniture as an example. Fork it and swap in your own place.
+This repo is Residence A4 at Loden, Brooklyn (1 bed / 1 bath, 546 SF) and its furniture as an example. Fork it
+and swap in your own place.
 
 ![The planner in 3D with see-through walls](docs/screenshot.png)
 
@@ -31,9 +32,10 @@ folder) and open `https://<you>.github.io/<repo>/web/`.
 Install the dependencies once: `python3 -m pip install -r requirements.txt`.
 
 1. **Floor plan: `floorplan.py`.** All units are real inches; x runs east, y runs south.
-   - Every wall face is a named line. Its position comes from a tape measurement (`MEAS`: "from line a to
-     line b is N inches") or, for unmeasured lines, from pixel positions on a photo of the plan (`PX_X` /
-     `PX_Y`), scaled by the px-per-inch the measurements calibrate. `solve()` places them.
+   - Every wall face is a named line. Its position comes from a dimension (`MEAS`: "from line a to
+     line b is N inches", here the room sizes printed on the brochure) or, for unmeasured lines, from pixel
+     positions on an image of the plan (`PX_X` / `PX_Y`), scaled by the px-per-inch the dimensions calibrate.
+     `solve()` places them, interpolating unmeasured lines between the nearest measured ones.
    - `WALLS`, `WINDOWS`, `DOORS` (hinged, with swing), `SLIDERS`, `FIXTURES` (kitchen, baths) and `ROOMS`
      are lists of rectangles between those lines.
    - For a new place, the simplest start is to replace those lines and lists with your own: measure the

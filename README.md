@@ -21,12 +21,19 @@ folder) and open `https://<you>.github.io/<repo>/web/`.
   two-state pieces (the lift-top coffee table), Delete to remove,
   Ctrl/Cmd+Z to undo.
 - **Lock** freezes the furniture so dragging only moves the camera. **See-through** makes the walls
-  translucent. **Standard / With guest** switch between the two layouts built into the page.
+  translucent. **4′ walls / Full** switches the apartment cut. **Standard / With guest** switches between
+  the two layouts built into the page.
 - Red = overlapping a wall or another piece; amber = blocking a door swing. Selecting a piece shows its
   clearance to the nearest wall or piece in each direction.
-- **Layouts** saves layouts in your browser and shares them as a text "layout code" anyone can paste in.
+- **Layouts** opens circulation-checked layout ideas (desk at the corner window, open lounge, guest ready),
+  saves layouts in your browser, and shares them as a text "layout code" anyone can paste in.
   (The page was built as a Claude artifact, where it can also share saved layouts between visitors through a
   database. On GitHub Pages or from a file, those features stay off and everything else works.)
+- The furniture sidebar collapses to a slim rail on desktop and opens as a drawer on narrow screens. Every
+  piece has a 3D thumbnail, and the black bike is shown hanging on a wall while its printable model remains
+  a separate floor model.
+- The web model includes detailed cabinets, appliances, bath fixtures, wall and floor finishes, soft
+  shadows, PBR material responses, crisp plan outlines, and a 65-inch TV matched to the walkthrough.
 
 ## Make it your own
 
@@ -51,12 +58,18 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
 3. **Website list: `web/export_web.py`.** `PIECES` gives each piece its name, group and color(s);
    `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south). Collisions use each
    piece's footprint rectangle; `FOOTPRINTS` in `furniture.py` overrides it (one rectangle per leg for the
-   L-shaped sectional, just the pot for plants).
+   L-shaped sectional, just the pot for plants). `IDEAS` lists alternative arrangements, each given as the
+   pieces it moves away from `EXAMPLE`; they appear under **Layout ideas** in the Layouts sheet. During
+   export, `web/layout_check.py` rejects a built-in layout that blocks a door swing, a fixture approach, a
+   30 inch circulation route, or 24 inch access beside the bed and in front of storage.
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
-   built-in Standard / With guest layouts with your `EXAMPLE`), then plain `python3 web/export_web.py` after
-   each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.
+   built-in Standard layout with your `EXAMPLE` and With guest with `EXAMPLE` adjusted by `GUEST`), then
+   plain `python3 web/export_web.py` after each change. It rewrites the data block inside `web/index.html`;
+   open or refresh the page to see it.
 5. **Printing (optional):** `python3 furniture.py` writes each piece and packed print plates to
    `output/furniture/` (1:60 by default; legs and thin parts are thickened so they print).
+6. **Tests:** `python3 -m unittest discover -s tests -v` checks the published layouts' circulation and
+   verifies that web-only furniture variants do not change printable geometry.
 
 ## Files
 
@@ -66,6 +79,8 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
 | `build.py` | Turns the plan into the 3D apartment, the dimensioned 2D plan, previews and STLs |
 | `furniture.py` | Furniture dimensions and builders; print plates |
 | `web/export_web.py` | Builds the scene (apartment + furniture meshes, obstacles, doors) and embeds it in the page |
+| `web/layout_check.py` | Validates built-in layouts for walking routes, door swings and furniture access |
+| `tests/test_web_layouts.py` | Regression tests for circulation rules and web-only furniture variants |
 | `web/index.html` | The planner (three.js r147 from jsDelivr); the scene data sits between the `scene:` markers |
 
 ## License

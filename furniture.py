@@ -32,8 +32,8 @@ FURNITURE = {
                          note='walnut lift-top coffee table with storage, on splayed legs; the top lifts to about '
                               '25 in and comes about 8 in forward (estimated)'),
     'tv-stand': dict(base_w=24, base_d=16, base_h=2.5, caster_h=2.0, pole_w=2.6, pole_d=1.8, pole_h=52, mount_z=44,
-                     mount_off=3.0, tv_w=48.4, tv_h=27.9, tv_t=2.5,
-                     note='55 in TV on a white rolling stand with a wood base; TV center about 44 in (estimated)'),
+                     mount_off=3.0, tv_w=57.1, tv_h=32.7, tv_t=2.4,
+                     note='65 in TV on a white rolling stand with a wood base; TV center about 44 in (estimated)'),
     'tier-shelf': dict(w=16, d=12, h=28, shelves=[3, 14.5, 27.4], post=1.0,
                        note='small 3-tier dark wood side shelf (estimated)'),
     'torchiere-lamp': dict(base_dia=11, base_t=1.2, h=70, pole_dia=0.9, shade_dia=15, shade_bot_dia=5, shade_h=6,
@@ -71,7 +71,8 @@ FURNITURE = {
     'hall-cabinet': dict(w=31.5, d=15.7, h=31.5, r=3,
                          note='dark walnut 2-door cabinet with rounded corners and brass pulls (estimated)'),
     'bike-black': dict(wheelbase=39.6, wheel_d=27.2, tire=1.25, bars=16.5, seat_tube=21, stack=21.8, reach=15.2,
-                       saddle_z=37.5, note='black road bike, leans on a wall: about 67 x 17 x 40 in (estimated from '
+                       saddle_z=37.5, lift=30, note='black road bike, hung on the web plan and printable as a floor model: '
+                                           'about 67 x 17 x 40 in (estimated from '
                                            'typical 54 cm geometry)'),
     'bike-red-wall': dict(wheelbase=39.2, wheel_d=27.0, tire=1.0, bars=16.0, seat_tube=21.5, stack=21.0, reach=15.0,
                           saddle_z=37.0, lift=30,
@@ -102,6 +103,32 @@ def cube(x0, y0, z0, x1, y1, z1):
 
 def union(ms):
     return m3d.Manifold.batch_boolean(ms, m3d.OpType.Add)
+
+
+def _rbox(x0, y0, z0, x1, y1, z1, r, segs=12):
+    """3D rounded box (web scale): convex hull of 8 corner spheres."""
+    r = min(r, (x1 - x0) * 0.45, (y1 - y0) * 0.45, (z1 - z0) * 0.45)
+    if r <= 1e-4:
+        return cube(x0, y0, z0, x1, y1, z1)
+    sp = m3d.Manifold.sphere(r, segs)
+    return m3d.Manifold.batch_hull([sp.translate([x, y, z])
+                                    for x in (x0 + r, x1 - r) for y in (y0 + r, y1 - r) for z in (z0 + r, z1 - r)])
+
+
+def _rslab(x0, y0, z0, x1, y1, z1, rxy, rz=0.0, segs=16):
+    """Rounded-corner horizontal slab with optional top/bottom chamfer rz."""
+    w, d, h = x1 - x0, y1 - y0, z1 - z0
+    rxy = min(rxy, w * 0.48, d * 0.48)
+    cs = m3d.CrossSection.square([w - 2 * rxy, d - 2 * rxy], center=True).offset(
+        rxy, m3d.JoinType.Round, circular_segments=segs)
+    if rz <= 1e-4:
+        return cs.extrude(h).translate([(x0 + x1) / 2, (y0 + y1) / 2, z0])
+    rz = min(rz, h * 0.45, rxy * 0.9)
+    mid = cs.extrude(h - 2 * rz).translate([0, 0, rz])
+    inner = cs.offset(-rz, m3d.JoinType.Round, circular_segments=segs)
+    return m3d.Manifold.batch_hull([mid, inner.extrude(0.02),
+                                    inner.extrude(0.02).translate([0, 0, h - 0.02])]).translate(
+        [(x0 + x1) / 2, (y0 + y1) / 2, z0])
 
 
 # Each builder works in model mm with x = width, y = depth (front face at y = 0), z = up.
@@ -555,15 +582,16 @@ def bike(f, s, wall_rack=False, parts=False):
 BUILDERS = {
     'sectional': sectional, 'coffee-table': lift_top_table,
     'coffee-table-open': lambda f, s, parts=False: lift_top_table(f, s, lifted=True, parts=parts),
-    'tv-stand': tv_stand, 'tv-55': tv, 'tier-shelf': tier_shelf, 'torchiere-lamp': torchiere, 'rug-6x9': rug,
+    'tv-stand': tv_stand, 'tv-65': tv, 'tier-shelf': tier_shelf, 'torchiere-lamp': torchiere, 'rug-6x9': rug,
     'plant-monstera': plant, 'plant-zz': plant,
     'standing-desk': standing_desk, 'office-chair': office_chair, 'counter-stool': shell_stool,
     'coat-rack': coat_rack, 'shoe-cabinet': cane_shoe_cabinet, 'arched-mirror': arched_mirror,
     'hall-cabinet': round_cabinet,
-    'bike-black': bike, 'bike-red-wall': lambda f, s, parts=False: bike(f, s, wall_rack=True, parts=parts),
+    'bike-black': lambda f, s, parts=False: bike(f, s, wall_rack=parts, parts=parts),
+    'bike-red-wall': lambda f, s, parts=False: bike(f, s, wall_rack=True, parts=parts),
     'queen-bed': queen_bed, 'nightstand': nightstand, 'tripod-lamp': tripod_lamp,
 }
-SRC = {'tv-55': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes
+SRC = {'tv-65': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes
 
 
 def _pot(f):
@@ -583,7 +611,7 @@ WEB_ONLY = {'coffee-table-open', 'tier-shelf', 'torchiere-lamp', 'plant-monstera
 
 
 GROUPS = {   # which plate each piece goes on; COUNT = copies per plate
-    'living': ['sectional', 'coffee-table', 'tv-stand', 'tv-55', 'standing-desk', 'rug-6x9'],
+    'living': ['sectional', 'coffee-table', 'tv-stand', 'tv-65', 'standing-desk', 'rug-6x9'],
     'bedroom-entry': ['queen-bed', 'nightstand', 'shoe-cabinet', 'hall-cabinet'],
 }
 COUNT = {'nightstand': 2}
@@ -663,7 +691,7 @@ def plate_hours(item_secs, tallest_mm, lh=LAYER_H):
 def preview(pieces, names, s, path, title):
     meshes, x = [], 0.0
     for k in names:
-        if k == 'tv-55':
+        if k == 'tv-65':
             continue
         man = pieces[k]
         if k == 'tv-stand':

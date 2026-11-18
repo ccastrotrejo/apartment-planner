@@ -62,3 +62,7 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
 | `furniture.py` | Furniture dimensions and builders; print plates |
 | `web/export_web.py` | Builds the scene (apartment + furniture meshes, obstacles, doors) and embeds it in the page |
 | `web/index.html` | The planner (three.js r147 from jsDelivr); the scene data sits between the `scene:` markers |
+
+## License
+
+MIT (see `LICENSE`): use, change and share it freely; keep the copyright notice.

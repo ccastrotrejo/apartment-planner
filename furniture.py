@@ -147,19 +147,77 @@ def union(ms):
     return m3d.Manifold.batch_boolean(ms, m3d.OpType.Add)
 
 
+def _rbox(x0, y0, z0, x1, y1, z1, r, segs=12):
+    """3D rounded box (web scale): convex hull of 8 corner spheres."""
+    r = min(r, (x1 - x0) * 0.45, (y1 - y0) * 0.45, (z1 - z0) * 0.45)
+    if r <= 1e-4:
+        return cube(x0, y0, z0, x1, y1, z1)
+    sp = m3d.Manifold.sphere(r, segs)
+    return m3d.Manifold.batch_hull([sp.translate([x, y, z])
+                                    for x in (x0 + r, x1 - r) for y in (y0 + r, y1 - r) for z in (z0 + r, z1 - r)])
+
+
+def _rslab(x0, y0, z0, x1, y1, z1, rxy, rz=0.0, segs=16):
+    """Rounded-corner horizontal slab with optional top/bottom chamfer rz."""
+    w, d, h = x1 - x0, y1 - y0, z1 - z0
+    rxy = min(rxy, w * 0.48, d * 0.48)
+    cs = m3d.CrossSection.square([w - 2 * rxy, d - 2 * rxy], center=True).offset(
+        rxy, m3d.JoinType.Round, circular_segments=segs)
+    if rz <= 1e-4:
+        return cs.extrude(h).translate([(x0 + x1) / 2, (y0 + y1) / 2, z0])
+    rz = min(rz, h * 0.45, rxy * 0.9)
+    mid = cs.extrude(h - 2 * rz).translate([0, 0, rz])
+    inner = cs.offset(-rz, m3d.JoinType.Round, circular_segments=segs)
+    return m3d.Manifold.batch_hull([mid, inner.extrude(0.02),
+                                    inner.extrude(0.02).translate([0, 0, h - 0.02])]).translate(
+        [(x0 + x1) / 2, (y0 + y1) / 2, z0])
+
+
+def _taper_leg(p0, p1, r0, r1, segs=12):
+    """Tapered round leg between two 3D points."""
+    return m3d.Manifold.batch_hull([m3d.Manifold.sphere(r0, segs).translate(list(p0)),
+                                    m3d.Manifold.sphere(r1, segs).translate(list(p1))])
+
+
 # Each builder works in model mm with x = width, y = depth (front face at y = 0), z = up.
-def sofa(f, s):
+def sofa(f, s, parts=False):
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
     aw, ah, sh, bd = f['arm_w'] * s, f['arm_h'] * s, f['seat_h'] * s, f['back_d'] * s
     n = f['seats']
     cw = (W - 2 * aw) / n
+    if parts:
+        lh = 1.8 * s
+        legs = [cube(x, y, 0, x + 2.4 * s, y + 2.4 * s, lh + 0.3 * s)
+                for x in (1.2 * s, W / 2 - 1.2 * s, W - 3.6 * s) for y in (1.5 * s, D - 3.9 * s)]
+        frame = [
+            _rbox(aw * 0.35, 0.8 * s, lh, W - aw * 0.35, D - 0.3 * s, 8.2 * s, 0.8 * s),
+            _rbox(aw * 0.4, D - bd * 0.48, lh, W - aw * 0.4, D, H - 6.2 * s, 1.2 * s),
+            _rbox(0.15 * s, 0.4 * s, lh, aw, D - 0.2 * s, ah - 3.6 * s, 1.0 * s),
+            _rbox(W - aw, 0.4 * s, lh, W - 0.15 * s, D - 0.2 * s, ah - 3.6 * s, 1.0 * s),
+            _rbox(0, 0.1 * s, ah - 4.8 * s, aw + 0.5 * s, D - 0.4 * s, ah, 2.0 * s),
+            _rbox(W - aw - 0.5 * s, 0.1 * s, ah - 4.8 * s, W, D - 0.4 * s, ah, 2.0 * s),
+        ]
+        cushions, backs = [], []
+        gap = 0.28 * s
+        for i in range(n):
+            x0, x1 = aw + i * cw + gap, aw + (i + 1) * cw - gap
+            cushions.append(_rbox(x0, 0, lh + 0.5 * s, x1, 4.8 * s, 13.6 * s, 1.1 * s))          # footrest bolster
+            cushions.append(_rbox(x0, 0, 13.7 * s, x1, D - bd + 1.6 * s, sh + 0.3 * s, 1.8 * s))  # seat cushion
+            backs.append(_rbox(x0 + 0.1 * s, D - bd - 1.0 * s, sh - 0.6 * s,
+                               x1 - 0.1 * s, D - bd * 0.34, H - 5.6 * s, 2.1 * s))                # lumbar back
+            backs.append(_rbox(x0 + 0.9 * s, D - bd * 0.9, H - 5.8 * s,
+                               x1 - 0.9 * s, D - 0.2 * s, H, 1.7 * s))                            # headrest
+        ctrl = [cube(0, 9.5 * s, 15.0 * s, 0.35 * s, 13.0 * s, 17.0 * s),
+                cube(W - 0.35 * s, 9.5 * s, 15.0 * s, W, 13.0 * s, 17.0 * s)]
+        return [('legs', union(legs)), ('frame', union(frame)), ('cushions', union(cushions)),
+                ('backs', union(backs)), ('controls', union(ctrl))]
     back_top = H - 5 * s                                       # headrests stand 5" above the back
-    parts = [cube(0, 0, 0, aw, D, ah), cube(W - aw, 0, 0, W, D, ah),
-             cube(aw, 0, 0, W - aw, D, sh), cube(aw, D - bd, 0, W - aw, D, back_top)]
+    pts = [cube(0, 0, 0, aw, D, ah), cube(W - aw, 0, 0, W, D, ah),
+           cube(aw, 0, 0, W - aw, D, sh), cube(aw, D - bd, 0, W - aw, D, back_top)]
     gap = 1.5 * s
     for i in range(n):                                         # one headrest per seat
-        parts.append(cube(aw + i * cw + gap / 2, D - bd * 0.85, 0, aw + (i + 1) * cw - gap / 2, D, H))
-    body = union(parts)
+        pts.append(cube(aw + i * cw + gap / 2, D - bd * 0.85, 0, aw + (i + 1) * cw - gap / 2, D, H))
+    body = union(pts)
     cuts = [cube(aw - 0.1, -0.1, 14 * s - GROOVE_W / 2, W - aw + 0.1, GROOVE_D, 14 * s + GROOVE_W / 2)]  # footrest line
     for i in range(1, n):
         x = aw + i * cw
@@ -175,10 +233,30 @@ def sofa_recline_zone(f, s, sofa_f):
     return cube(0, 0, 0, W - 2 * aw, f['d'] * s, 0.6)
 
 
-def coffee_table(f, s):
+def coffee_table(f, s, parts=False):
     W, D, H, lh = f['w'] * s, f['d'] * s, f['h'] * s, f['leg_h'] * s
-    body = cube(0, 0, lh, W, D, H)
     cw = f['cubby_w'] * s
+    if parts:
+        t = 0.85 * s
+        div_x = W - cw - t
+        top_s = _rslab(0, 0, H - t, W, D, H, 0.45 * s, rz=0.14 * s)
+        bot_s = _rslab(0, 0, lh, W, D, lh + t, 0.45 * s, rz=0.1 * s)
+        walls = [cube(0.15 * s, 0.15 * s, lh + t - 0.1, t, D - 0.15 * s, H - t + 0.1),
+                 cube(W - t, 0.15 * s, lh + t - 0.1, W - 0.15 * s, D - 0.15 * s, H - t + 0.1),
+                 cube(div_x, 0.15 * s, lh + t - 0.1, div_x + t, D - 0.15 * s, H - t + 0.1),
+                 cube(0.15 * s, D - t, lh + t - 0.1, W - 0.15 * s, D - 0.15 * s, H - t + 0.1)]
+        drawer = _rbox(t + 0.22 * s, 0.28 * s, lh + t + 0.22 * s,
+                       div_x - 0.22 * s, 1.0 * s, H - t - 0.22 * s, 0.2 * s)
+        mx = (t + div_x) / 2
+        mz = (lh + H) / 2
+        pull = _rbox(mx - 2.2 * s, 0.02 * s, mz - 0.25 * s, mx + 2.2 * s, 0.35 * s, mz + 0.25 * s, 0.12 * s)
+        legs = []
+        for sx, x_top, x_bot in ((-1, 3.8 * s, 1.8 * s), (1, W - 3.8 * s, W - 1.8 * s)):
+            for y_top, y_bot in ((3.0 * s, 1.5 * s), (D - 3.0 * s, D - 1.5 * s)):
+                legs.append(_taper_leg((x_top, y_top, lh + 0.3 * s), (x_bot, y_bot, 0.45 * s), 0.78 * s, 0.48 * s))
+                pull = union([pull, _taper_leg((x_bot, y_bot, 0.9 * s), (x_bot, y_bot, 0.42 * s), 0.5 * s, 0.42 * s)])
+        return [('carcass', union([top_s, bot_s] + walls)), ('drawer', drawer), ('pulls', pull), ('legs', union(legs))]
+    body = cube(0, 0, lh, W, D, H)
     cubby = cube(W - cw - 1.0 * s, -0.1, lh + 1.5 * s, W - 1.0 * s, D * 0.7, H - 1.5 * s)   # open shelf, front
     leg = max(MIN_POST, 1.5 * s)
     ins = 2.0 * s
@@ -190,9 +268,18 @@ def coffee_table(f, s):
     return upright.mirror([0, 0, 1]).translate([0, 0, H])
 
 
-def accent_chair(f, s):
+def accent_chair(f, s, parts=False):
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
     sh, bd, lh = f['seat_h'] * s, f['back_d'] * s, f['leg_h'] * s
+    if parts:
+        legs = [_taper_leg((xt, yt, lh + 0.8 * s), (xb, yb, 0.5 * s), 0.85 * s, 0.5 * s)
+                for xt, xb in ((3.5 * s, 1.8 * s), (W - 3.5 * s, W - 1.8 * s))
+                for yt, yb in ((3.5 * s, 2.0 * s), (D - 3.5 * s, D - 1.8 * s))]
+        frame = [_rbox(0, 0.5 * s, lh, W, D, lh + 5.2 * s, 1.5 * s),
+                 _rbox(0, D - bd, lh + 2.5 * s, W, D, H, 2.2 * s)]
+        cushions = [_rbox(0.3 * s, 0, lh + 4.8 * s, W - 0.3 * s, D - bd + 1.6 * s, sh + 0.2 * s, 2.0 * s),
+                    _rbox(4.2 * s, D - bd - 3.0 * s, sh - 0.2 * s, W - 4.2 * s, D - bd + 0.6 * s, sh + 8.8 * s, 1.7 * s)]
+        return [('legs', union(legs)), ('frame', union(frame)), ('cushion', union(cushions))]
     body = union([cube(0, 0, 0, W, D - bd, sh), cube(0, D - bd, 0, W, D, H)])
     r = 0.8                                                    # recessed base reads as open legs
     base = union([cube(-0.1, -0.1, -0.1, W + 0.1, r, lh), cube(-0.1, -0.1, -0.1, r, D + 0.1, lh),
@@ -201,12 +288,42 @@ def accent_chair(f, s):
     return body - union([base, seam])
 
 
-def plant(f, s):
+def plant(f, s, parts=False):
     """Bird of paradise: a floor pot, a clump of stems fanning out, a paddle leaf at the end of each. The leaves
     face outward and taper from the stem, so no edge leans more than ~40 deg from vertical: no supports."""
     rp, ph = f['pot_dia'] * s / 2, f['pot_h'] * s
     rs = f['saucer_dia'] * s / 2                                # saucer: a wider footprint for a tall, top-heavy print
-    parts = [m3d.Manifold.cylinder(0.6, rs, rs, 48), m3d.Manifold.cylinder(ph, rp, rp, 48)]
+    if parts:
+        rc = rp * 1.35                                          # realistic 9.5" ceramic floor planter at web scale
+        saucer = m3d.Manifold.cylinder(0.7 * s, rc * 1.08, rc * 0.96, 48)
+        outer = m3d.Manifold.cylinder(ph * 1.15, rc * 0.88, rc * 1.02, 48).translate([0, 0, 0.45 * s])
+        well = m3d.Manifold.cylinder(2.0 * s, rc * 0.86, rc * 0.90, 48).translate([0, 0, ph * 1.15 - 1.2 * s])
+        pot = union([saucer, outer - well])
+        soil = m3d.Manifold.cylinder(0.5 * s, rc * 0.88, rc * 0.88, 36).translate([0, 0, ph * 1.15 - 1.3 * s])
+        stems, blades = [], []
+        th = max(0.35, 0.22 * s)
+        for lf in f['leaves']:
+            phi, al = math.radians(lf['dir']), math.radians(lf['tilt'])
+            ux, uy = math.cos(phi), math.sin(phi)
+            a = np.array([math.sin(al) * ux, math.sin(al) * uy, math.cos(al)])
+            t = np.array([-uy, ux, 0.0])
+            n = np.cross(t, a)
+            p0 = np.array([0.3 * rp * ux, 0.3 * rp * uy, ph - 0.3 * s])
+            p1 = p0 + lf['stem'] * s * a
+            pm = (p0 + p1) / 2 + np.array([0.0, 0.0, 1.2 * s])
+            stems.append(_tube([p0, pm, p1], 0.32 * s))
+            L, hw = lf['len'] * s, lf['w'] * s / 2
+            us = np.linspace(0, L, 25)
+            half = np.where(us < 0.6 * L, np.sin(np.pi / 2 * us / (0.6 * L)),
+                            np.cos(np.pi / 2 * (us - 0.6 * L) / (0.4 * L)))
+            half = np.maximum(hw * half, 0.05)
+            outline = np.array([(h, u) for u, h in zip(us, half)] + [(-h, u) for u, h in zip(us[::-1], half[::-1])])
+            blade = m3d.CrossSection([outline], m3d.FillRule.NonZero).extrude(th).translate([0, 0, -th / 2])
+            origin = p1 - 0.3 * a
+            blades.append(blade.transform(np.column_stack([t, a, n, origin])))
+        return [(k, m.translate([rs, rs, 0])) for k, m in
+                (('pot', pot), ('soil', soil), ('stems', union(stems)), ('leaves', union(blades)))]
+    pts = [m3d.Manifold.cylinder(0.6, rs, rs, 48), m3d.Manifold.cylinder(ph, rp, rp, 48)]
     th = f['leaf_t_mm']
     for lf in f['leaves']:
         phi, al = math.radians(lf['dir']), math.radians(lf['tilt'])
@@ -216,7 +333,7 @@ def plant(f, s):
         n = np.cross(t, a)                                                      # leaf faces outward
         p0 = np.array([0.3 * rp * ux, 0.3 * rp * uy, ph - 0.5])
         p1 = p0 + lf['stem'] * s * a
-        parts.append(_tube([p0, p1], f['stem_mm'] / 2))
+        pts.append(_tube([p0, p1], f['stem_mm'] / 2))
         L, hw = lf['len'] * s, lf['w'] * s / 2
         us = np.linspace(0, L, 25)                                              # widest at 60%, pointed tips
         half = np.where(us < 0.6 * L, np.sin(np.pi / 2 * us / (0.6 * L)), np.cos(np.pi / 2 * (us - 0.6 * L) / (0.4 * L)))
@@ -224,15 +341,34 @@ def plant(f, s):
         outline = np.array([(h, u) for u, h in zip(us, half)] + [(-h, u) for u, h in zip(us[::-1], half[::-1])])
         blade = m3d.CrossSection([outline], m3d.FillRule.NonZero).extrude(th).translate([0, 0, -th / 2])
         origin = p1 - 0.3 * a
-        parts.append(blade.transform(np.column_stack([t, a, n, origin])))
-    return union(parts).translate([rs, rs, 0])
+        pts.append(blade.transform(np.column_stack([t, a, n, origin])))
+    return union(pts).translate([rs, rs, 0])
 
 
-def door_cabinet(f, s):
+def door_cabinet(f, s, parts=False):
     """Cabinet with hinged doors across the front (y = 0), a top edge line and short feet."""
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
     legs = f.get('leg_h', 0) * s
     n = f.get('doors', 2)
+    if parts:
+        top_t = 0.85 * s
+        carcass = union([cube(0.15 * s, 0.8 * s, legs, W - 0.15 * s, D, H - top_t + 0.1),
+                         _rslab(0, 0.25 * s, H - top_t, W, D, H, 0.35 * s, rz=0.12 * s)])
+        doors, knobs = [], []
+        dw = (W - 0.5 * s) / n
+        st = 1.6 * s
+        for i in range(n):
+            x0, x1 = 0.25 * s + i * dw + 0.12 * s, 0.25 * s + (i + 1) * dw - 0.12 * s
+            z0, z1 = legs + 0.3 * s, H - top_t - 0.22 * s
+            slab = cube(x0, 0.32 * s, z0, x1, 0.85 * s, z1)
+            recess = cube(x0 + st, 0.28 * s, z0 + st, x1 - st, 0.55 * s, z1 - st)
+            doors.append(slab - recess)
+            kx = x1 - 1.1 * s if i == 0 else x0 + 1.1 * s
+            knobs.append(m3d.Manifold.cylinder(0.38 * s, 0.42 * s, 0.32 * s, 16).rotate([90, 0, 0]).translate(
+                [kx, 0.38 * s, (z0 + z1) * 0.56]))
+        feet = [_taper_leg((x, y, legs + 0.3 * s), (x, y, 0.35 * s), 0.7 * s, 0.45 * s)
+                for x in (2.0 * s, W - 2.0 * s) for y in (2.0 * s, D - 2.0 * s)]
+        return [('body', carcass), ('doors', union(doors)), ('knobs', union(knobs)), ('legs', union(feet))]
     cuts = _grooves_front(W, H, s, zs=[H - 1.0 * s, legs + 0.5 * s],
                           xs=[W * i / n for i in range(1, n)], z_lo=legs + 0.5 * s, z_hi=H - 1.0 * s)
     if legs:
@@ -240,20 +376,57 @@ def door_cabinet(f, s):
     return cube(0, 0, 0, W, D, H) - union(cuts)
 
 
-def standing_desk(f, s):
+def standing_desk(f, s, parts=False):
     """Desktop on two full-depth side frames. Upright, the top bridges cleanly between the frames."""
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
     t, lw, li = f['top_t'] * s, max(MIN_POST, f['leg_w'] * s), f['leg_inset'] * s
+    if parts:
+        top = _rslab(0, 0, H - t, W, D, H, 0.75 * s, rz=0.18 * s)
+        cw, cd = 2.4 * s, 1.6 * s
+        frame = [cube(li, D / 2 - 5.5 * s, H - t - 1.2 * s, W - li, D / 2 + 5.5 * s, H - t + 0.05)]
+        frame.append(cube(li, D / 2 - 2.0 * s, H - t - 2.0 * s, W - li, D / 2 + 2.0 * s, H - t))
+        for x in (li + 1.0 * s, W - li - 1.0 * s - cw):
+            frame.append(_rslab(x - 0.4 * s, 1.6 * s, 0, x + cw + 0.4 * s, D - 1.6 * s, 1.0 * s, 0.5 * s, rz=0.15 * s))
+            frame.append(cube(x, D / 2 - cd / 2, 0.8 * s, x + cw, D / 2 + cd / 2, 15.0 * s))
+            frame.append(cube(x + 0.2 * s, D / 2 - cd * 0.38, 14.5 * s, x + cw - 0.2 * s, D / 2 + cd * 0.38, H - t))
+        frame.append(_rbox(W - 8.5 * s, 0.25 * s, H - t - 0.75 * s, W - 5.5 * s, 2.4 * s, H - t + 0.05, 0.15 * s))
+        return [('top', top), ('frame', union(frame))]
     legs = [cube(x, 1.5 * s, 0, x + lw, D - 1.5 * s, H - t + 0.1) for x in (li, W - li - lw)]
     return union([cube(0, 0, H - t, W, D, H)] + legs)
 
 
-def tv_stand(f, s):
+def tv_stand(f, s, parts=False):
     """AX WABER-style rolling stand: base plate on 4 casters (shown as a recessed band so it prints solid),
     one pole, and a mount block with a 45-degree underside (no supports). The TV prints separately as a flat
     slab and glues onto the mount block's front face. Front (TV side) at y = 0."""
     W, D = f['base_w'] * s, f['base_d'] * s
     bh, ch = f['base_h'] * s, f['caster_h'] * s
+    if parts:
+        cx, cy = W / 2, D / 2
+        pw, pd = f['pole_w'] * s, f['pole_d'] * s
+        stand = [_rslab(0, 0, ch, W, D, bh, 1.2 * s, rz=0.2 * s),
+                 _rslab(cx - pw * 0.8, cy - pd * 0.8, bh - 0.1, cx + pw * 0.8, cy + pd * 0.8, bh + 0.8 * s, 0.4 * s),
+                 _rslab(cx - pw / 2, cy - pd / 2, bh, cx + pw / 2, cy + pd / 2, f['pole_h'] * s, 0.35 * s),
+                 _rslab(cx - 7.5 * s, cy - pd / 2 - 4.5 * s, 18 * s, cx + 7.5 * s, cy + 1.0 * s, 18.6 * s, 0.6 * s)]
+        for x in (2.2 * s, W - 2.2 * s):
+            for y in (2.2 * s, D - 2.2 * s):
+                stand.append(m3d.Manifold.cylinder(0.8 * s, 1.05 * s, 1.05 * s, 20).rotate([0, 90, 0]).translate(
+                    [x - 0.4 * s, y, 1.05 * s]))
+                stand.append(cube(x - 0.55 * s, y - 0.55 * s, 1.05 * s, x + 0.55 * s, y + 0.55 * s, ch + 0.2 * s))
+        mz, off = f['mount_z'] * s, f['mount_off'] * s
+        y_front = cy - pd / 2 - off
+        stand.append(cube(cx - 8 * s, y_front - 0.2 * s, mz - 4 * s, cx + 8 * s, cy - pd / 2 + 0.2 * s, mz + 4 * s))
+        tw, th, tt = f['tv_w'] * s, f['tv_h'] * s, f['tv_t'] * s
+        tx0, tx1 = cx - tw / 2, cx + tw / 2
+        tz0, tz1 = mz - th / 2, mz + th / 2
+        ty0 = y_front - tt                                      # viewer-facing screen plane (toward y = 0)
+        bz = 0.42 * s
+        panel = _rbox(tx0, ty0, tz0, tx1, ty0 + 0.65 * s, tz1, 0.18 * s)
+        housing = _rbox(tx0 + 3.5 * s, ty0 + 0.5 * s, tz0 + 2.5 * s, tx1 - 3.5 * s, y_front, tz1 - 4.0 * s, 0.4 * s)
+        rec = cube(tx0 + bz, ty0 - 0.2 * s, tz0 + bz, tx1 - bz, ty0 + 0.22 * s, tz1 - bz)
+        bezel = union([panel, housing]) - rec
+        screen = cube(tx0 + bz, ty0 + 0.14 * s, tz0 + bz, tx1 - bz, ty0 + 0.32 * s, tz1 - bz)
+        return [('stand', union(stand)), ('bezel', bezel), ('screen', screen)]
     base = cube(0, 0, 0, W, D, bh) - union(_recessed_base(W, D, ch))
     pw, pd = max(TALL_POST, f['pole_w'] * s), max(TALL_POST, f['pole_d'] * s)
     cx, cy = W / 2, D / 2
@@ -284,10 +457,35 @@ def tv(f, s):
     return cube(0, 0, 0, f['tv_w'] * s, f['tv_h'] * s, max(0.8, f['tv_t'] * s))
 
 
-def pedestal_table(f, s):
+def pedestal_table(f, s, parts=False):
     """Round (dia) or oval (w x d) top on a pedestal. Printed upside down: top on the bed, the column and a
     45-degree flare up to the base disc, so nothing overhangs."""
     w, d = f.get('w', f.get('dia')) * s, f.get('d', f.get('dia')) * s
+    if parts:
+        H, t = f['h'] * s, f.get('top_t', 1.25) * s
+        rc = f.get('column_dia', 4) * s / 2
+        rb = f.get('base_dia', 18) * s / 2
+        if abs(w - d) < 1e-6:
+            cs = m3d.CrossSection.circle(w / 2, 64)
+        else:
+            r = d / 2
+            cs = m3d.CrossSection.square([w - 2 * r, 0.02], center=True).offset(
+                r, m3d.JoinType.Round, circular_segments=48)
+        rz = min(0.2 * s, t * 0.35)
+        inner = cs.offset(-rz, m3d.JoinType.Round, circular_segments=32)
+        top = m3d.Manifold.batch_hull([
+            cs.extrude(t - 2 * rz).translate([0, 0, H - t + rz]),
+            inner.extrude(0.02).translate([0, 0, H - t]),
+            inner.extrude(0.02).translate([0, 0, H - 0.02]),
+        ])
+        flare = min(4.5 * s, (rb - rc) * 0.65)
+        base = union([
+            m3d.Manifold.cylinder(0.75 * s, rb, rb * 0.97, 64),
+            m3d.Manifold.cylinder(flare, rb * 0.95, rc, 48).translate([0, 0, 0.65 * s]),
+            m3d.Manifold.cylinder(H - t - 0.5 * s, rc, rc * 0.92, 36).translate([0, 0, 0.65 * s]),
+            m3d.Manifold.cylinder(0.8 * s, rc * 2.1, rc * 2.4, 36).translate([0, 0, H - t - 0.75 * s]),
+        ])
+        return [('top', top.translate([w / 2, d / 2, 0])), ('base', base.translate([w / 2, d / 2, 0]))]
     H, t = f['h'] * s, max(TABLE_TOP_MIN, f.get('top_t', 1.25) * s)
     rc = max(MIN_POST / 2 + 0.2, f.get('column_dia', 4) * s / 2)
     rb = f.get('base_dia', 18) * s / 2
@@ -308,18 +506,36 @@ def pedestal_table(f, s):
     return body.translate([w / 2, d / 2, 0])
 
 
-def leg_table(f, s):
+def leg_table(f, s, parts=False):
     """Rectangular top on 4 legs. Printed upside down: top on the bed, legs up."""
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
+    if parts:
+        t = f.get('top_t', 1.25) * s
+        top = _rslab(0, 0, H - t, W, D, H, 0.85 * s, rz=0.18 * s)
+        if f.get('leaf_at'):
+            seams = [cube(xx * s - 0.08 * s, -0.1, H - 0.14 * s, xx * s + 0.08 * s, D + 0.1, H + 0.1)
+                     for xx in f['leaf_at']]
+            top = top - union(seams)
+        ins = 2.6 * s
+        aw, ah = 0.9 * s, 3.0 * s
+        x0, x1, y0, y1 = ins, W - ins, ins, D - ins
+        apron = [cube(x0, y0, H - t - ah, x1, y0 + aw, H - t + 0.1),
+                 cube(x0, y1 - aw, H - t - ah, x1, y1, H - t + 0.1),
+                 cube(x0, y0, H - t - ah, x0 + aw, y1, H - t + 0.1),
+                 cube(x1 - aw, y0, H - t - ah, x1, y1, H - t + 0.1)]
+        legs = [_taper_leg((xt, yt, H - t - 0.4 * s), (xb, yb, 0.55 * s), 1.05 * s, 0.62 * s)
+                for xt, xb in ((ins + 0.8 * s, ins - 0.3 * s), (W - ins - 0.8 * s, W - ins + 0.3 * s))
+                for yt, yb in ((ins + 0.8 * s, ins - 0.3 * s), (D - ins - 0.8 * s, D - ins + 0.3 * s))]
+        return [('top', top), ('base', union(apron + legs))]
     t = max(TABLE_TOP_MIN, f.get('top_t', 1.25) * s)
     leg, ins = max(TALL_POST, 2.0 * s), 2.5 * s
-    parts = [cube(0, 0, 0, W, D, t)]
-    parts += [cube(x, y, t - 0.1, x + leg, y + leg, H) for x in (ins, W - ins - leg) for y in (ins, D - ins - leg)]
+    pts = [cube(0, 0, 0, W, D, t)]
+    pts += [cube(x, y, t - 0.1, x + leg, y + leg, H) for x in (ins, W - ins - leg) for y in (ins, D - ins - leg)]
     # apron under the top, flush with the legs' outer faces: braces the leg roots
     aw, ah = 1.0, max(1.0, 3.0 * s)
     x0, x1, y0, y1 = ins, W - ins, ins, D - ins
-    parts += [cube(x0, y0, t - 0.1, x1, y0 + aw, t + ah), cube(x0, y1 - aw, t - 0.1, x1, y1, t + ah),
-              cube(x0, y0, t - 0.1, x0 + aw, y1, t + ah), cube(x1 - aw, y0, t - 0.1, x1, y1, t + ah)]
+    pts += [cube(x0, y0, t - 0.1, x1, y0 + aw, t + ah), cube(x0, y1 - aw, t - 0.1, x1, y1, t + ah),
+            cube(x0, y0, t - 0.1, x0 + aw, y1, t + ah), cube(x1 - aw, y0, t - 0.1, x1, y1, t + ah)]
     label = _bed_label(f['label'], TABLE_LABEL_H, W / 2, D / 2)
     cuts = [label]
     if f.get('leaf_at'):                                        # seams on the tabletop (bed side, reads from above),
@@ -327,19 +543,37 @@ def leg_table(f, s):
         keep = cube(-1, b[1] - 0.8, -1, W + 1, b[4] + 0.8, t + 1)
         cuts += [cube(xx * s - GROOVE_W / 2, -0.1, -0.1, xx * s + GROOVE_W / 2, D + 0.1, GROOVE_D) - keep
                  for xx in f['leaf_at']]
-    return union(parts) - union(cuts)
+    return union(pts) - union(cuts)
 
 
-def dining_chair(f, s):
+def dining_chair(f, s, parts=False):
     """Armless dining chair: solid seat (recessed base reads as legs) + thin back."""
     W, D, H, sh = f['w'] * s, f['d'] * s, f['h'] * s, f['seat_h'] * s
+    if parts:
+        ins = 1.4 * s
+        frame = [
+            _taper_leg((ins + 0.4 * s, ins + 0.6 * s, sh - 1.4 * s), (ins, ins, 0.45 * s), 0.68 * s, 0.46 * s),
+            _taper_leg((W - ins - 0.4 * s, ins + 0.6 * s, sh - 1.4 * s), (W - ins, ins, 0.45 * s), 0.68 * s, 0.46 * s),
+            _tube([(ins, D - 1.8 * s, 0.45 * s), (ins + 0.3 * s, D - 2.3 * s, sh), (ins + 0.2 * s, D - 0.7 * s, H - 0.6 * s)], 0.58 * s),
+            _tube([(W - ins, D - 1.8 * s, 0.45 * s), (W - ins - 0.3 * s, D - 2.3 * s, sh), (W - ins - 0.2 * s, D - 0.7 * s, H - 0.6 * s)], 0.58 * s),
+            cube(ins + 0.2 * s, ins + 0.3 * s, sh - 2.4 * s, W - ins - 0.2 * s, D - 2.0 * s, sh - 1.2 * s),
+            _rbox(ins - 0.2 * s, D - 1.5 * s, H - 5.6 * s, W - ins + 0.2 * s, D, H, 0.55 * s),
+        ]
+        seat = _rbox(0.35 * s, 0.2 * s, sh - 1.6 * s, W - 0.35 * s, D - 1.7 * s, sh + 0.2 * s, 0.85 * s)
+        return [('frame', union(frame)), ('seat', seat)]
     bt = max(1.2, f.get('back_t', 2) * s)
     body = union([cube(0, 0, 0, W, D, sh), cube(0, D - bt, 0, W, D, H)])
     return body - union(_recessed_base(W, D, sh - 2 * s, r=0.6, sides='FLR'))
 
 
-def rug(f, s):
+def rug(f, s, parts=False):
     W, D = f['w'] * s, f['d'] * s
+    if parts:
+        rt, bw = 0.28 * s, 3.2 * s
+        outer = _rslab(0, 0, 0, W, D, rt * 0.9, 1.0 * s, rz=0.08 * s)
+        hole = cube(bw, bw, -0.5, W - bw, D - bw, rt + 0.5)
+        field = _rslab(bw - 0.05 * s, bw - 0.05 * s, 0, W - bw + 0.05 * s, D - bw + 0.05 * s, rt, 0.4 * s, rz=0.06 * s)
+        return [('field', field), ('border', outer - hole)]
     label = _label(f['label'], RUG_LABEL_H).extrude(LABEL_D + 0.1).translate([W / 2, D / 2, RUG_T - LABEL_D])
     return cube(0, 0, 0, W, D, RUG_T) - label
 
@@ -379,7 +613,7 @@ def _recessed_base(W, D, h, r=0.8, sides='FLRB'):
     return c
 
 
-def queen_bed(f, s):
+def queen_bed(f, s, parts=False):
     """Frame + mattress + headboard + two pillows. Foot of the bed at y = 0, headboard at the back."""
     W, L = f['frame_w'] * s, f['frame_l'] * s
     fh, mt = f['frame_h'] * s, f['mattress_t'] * s
@@ -388,26 +622,73 @@ def queen_bed(f, s):
     mx0 = (W - mw) / 2
     my1 = L - hb_t - 0.5 * s
     my0 = my1 - ml
-    parts = [cube(0, 0, 0, W, L - hb_t, fh), cube(mx0, my0, fh - 0.1, mx0 + mw, my1, fh + mt),
-             cube(0, L - hb_t, 0, W, L, hb_h)]
+    if parts:
+        lh = f.get('leg_h', 4) * s
+        legs = [_taper_leg((x, y, lh + 0.5 * s), (x, y, 0.45 * s), 0.9 * s, 0.58 * s)
+                for x in (2.4 * s, W - 2.4 * s) for y in (2.4 * s, L - 2.4 * s)]
+        rail_outer = _rslab(0, 0, lh, W, L - hb_t + 0.4 * s, fh, 1.1 * s, rz=0.25 * s)
+        rail_well = cube(mx0 + 0.4 * s, my0 + 0.4 * s, fh - 2.2 * s, mx0 + mw - 0.4 * s, my1 + 0.4 * s, fh + 1.0)
+        hb = [_rbox(0, L - hb_t + 0.25 * s, lh * 0.5, W, L, hb_h, 0.9 * s)]
+        nc, bdr = 4, 2.2 * s
+        cw = (W - 2 * bdr) / nc
+        for i in range(nc):
+            hb.append(_rbox(bdr + i * cw + 0.18 * s, L - hb_t - 0.45 * s, fh - 1.0 * s,
+                            bdr + (i + 1) * cw - 0.18 * s, L - 0.3 * s, hb_h - 1.8 * s, 0.85 * s))
+        frame = union([rail_outer - rail_well] + hb)
+        matt = _rbox(mx0, my0, fh - 1.4 * s, mx0 + mw, my1, fh + mt, 1.5 * s)
+        cuff = _rbox(mx0 - 0.55 * s, my1 - 24.5 * s, fh + mt - 0.5 * s, mx0 + mw + 0.55 * s, my1 - 19.2 * s, fh + mt + 1.05 * s, 0.55 * s)
+        duvet = _rbox(mx0 - 0.75 * s, my0 - 0.55 * s, fh + 1.8 * s, mx0 + mw + 0.75 * s, my1 - 20.5 * s, fh + mt + 0.8 * s, 1.7 * s)
+        pw, gap = 25.5 * s, (mw - 51.0 * s) / 3
+        pills = []
+        for i in range(2):
+            x0 = mx0 + gap + i * (pw + gap)
+            sham = _rbox(0, 0, 0, pw, 5.2 * s, 12.5 * s, 1.7 * s).rotate([14, 0, 0]).translate(
+                [x0, my1 - 6.8 * s, fh + mt - 0.6 * s])
+            slp = _rbox(0.5 * s, 0, 0, pw - 0.5 * s, 12.5 * s, 4.6 * s, 1.7 * s).rotate([7, 0, 0]).translate(
+                [x0, my1 - 18.8 * s, fh + mt - 0.2 * s])
+            pills += [sham, slp]
+        return [('legs', union(legs)), ('frame', frame), ('mattress', union([matt, cuff])),
+                ('duvet', duvet), ('pillows', union(pills))]
+    pts = [cube(0, 0, 0, W, L - hb_t, fh), cube(mx0, my0, fh - 0.1, mx0 + mw, my1, fh + mt),
+           cube(0, L - hb_t, 0, W, L, hb_h)]
     pw, pd, ph = 26 * s, 18 * s, 4 * s                         # two standard pillows across the head
     gap = (mw - 2 * pw) / 3
     for i in range(2):
         x0 = mx0 + gap + i * (pw + gap)
-        parts.append(cube(x0, my1 - 2 * s - pd, fh + mt - 0.1, x0 + pw, my1 - 2 * s, fh + mt + ph))
-    body = union(parts)
+        pts.append(cube(x0, my1 - 2 * s - pd, fh + mt - 0.1, x0 + pw, my1 - 2 * s, fh + mt + ph))
+    body = union(pts)
     fold = cube(mx0 - 0.1, my1 - 2 * s - pd - 10 * s - GROOVE_W / 2, fh + mt - GROOVE_D,
                 mx0 + mw + 0.1, my1 - 2 * s - pd - 10 * s + GROOVE_W / 2, fh + mt + 1)    # duvet fold line
     cuts = [fold] + _recessed_base(W, L - hb_t, f.get('leg_h', 0) * s, sides='FLR') if f.get('leg_h') else [fold]
     return body - union(cuts)
 
 
-def dresser(f, s):
+def dresser(f, s, parts=False):
     """rows x cols drawers, top edge line, recessed base."""
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
     base = f.get('base_h', 3) * s
     top_t = 1.0 * s
     rows, cols = f['rows'], f['cols']
+    if parts:
+        carcass = union([
+            cube(0.15 * s, 0.85 * s, base, W - 0.15 * s, D, H - top_t + 0.1),
+            cube(0.45 * s, 1.35 * s, 0, W - 0.45 * s, D - 0.2 * s, base + 0.2),
+            _rslab(0, 0.2 * s, H - top_t, W, D, H, 0.35 * s, rz=0.12 * s),
+        ])
+        gap = 0.24 * s
+        dh = (H - top_t - base - gap * (rows + 1)) / rows
+        dw = (W - 0.6 * s - gap * (cols + 1)) / cols
+        fronts, pulls = [], []
+        pw = min(5.2 * s, dw * 0.38)
+        for r in range(rows):
+            z0 = base + gap + r * (dh + gap)
+            for c in range(cols):
+                x0 = 0.3 * s + gap + c * (dw + gap)
+                fronts.append(_rbox(x0, 0.32 * s, z0, x0 + dw, 0.9 * s, z0 + dh, 0.14 * s))
+                cx = x0 + dw / 2
+                pz = z0 + dh * 0.62
+                pulls.append(_rbox(cx - pw / 2, 0, pz - 0.2 * s, cx + pw / 2, 0.36 * s, pz + 0.2 * s, 0.08 * s))
+        return [('body', carcass), ('drawers', union(fronts)), ('pulls', union(pulls))]
     zs = [H - top_t] + [base + (H - top_t - base) * i / rows for i in range(1, rows)]
     xs = [W * j / cols for j in range(1, cols)]
     cuts = _grooves_front(W, H, s, zs=zs, xs=xs, z_lo=base, z_hi=H - top_t)
@@ -415,10 +696,27 @@ def dresser(f, s):
     return cube(0, 0, 0, W, D, H) - union(cuts)
 
 
-def nightstand(f, s):
+def nightstand(f, s, parts=False):
     """Small bedside table: optional drawer(s), optional open shelf, optional legs."""
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
     legs = f.get('leg_h', 0) * s
+    if parts:
+        top_t, side_t, plinth = 0.75 * s, 0.65 * s, max(1.6 * s, legs)
+        body = union([
+            cube(0, 0.45 * s, 0, side_t, D, H - top_t + 0.1),
+            cube(W - side_t, 0.45 * s, 0, W, D, H - top_t + 0.1),
+            cube(side_t - 0.1, D - side_t, 0, W - side_t + 0.1, D, H - top_t + 0.1),
+            cube(side_t - 0.1, 0.75 * s, 0, W - side_t + 0.1, D, plinth),
+            cube(side_t - 0.1, 0.65 * s, plinth, W - side_t + 0.1, D, H - top_t + 0.1),
+            _rslab(0, 0, H - top_t, W, D, H, 0.28 * s, rz=0.1 * s),
+        ])
+        n = max(1, f.get('drawers', 2))
+        gap = 0.55 * s
+        dh = (H - top_t - plinth - gap * (n + 1)) / n
+        fronts = [_rbox(side_t + 0.15 * s, 0.08 * s, plinth + gap + i * (dh + gap),
+                        W - side_t - 0.15 * s, 0.7 * s, plinth + gap + i * (dh + gap) + dh, 0.14 * s)
+                  for i in range(n)]
+        return [('body', body), ('drawers', union(fronts))]
     body = cube(0, 0, 0, W, D, H)
     cuts = []
     top_t = 0.8 * s
@@ -440,23 +738,50 @@ def nightstand(f, s):
     return body - union(cuts) if cuts else body
 
 
-def sofa_bed(f, s, opened=False):
+def sofa_bed(f, s, opened=False, parts=False):
     """Innovation Living-style sofa bed (Achillas): armless, on caster legs. Folded = seat unit in front,
     upright back section behind, two leaning back cushions. Opened = the seat slides forward and the back
     folds down: one flat mattress, back edge where the sofa's back was. Front at y = 0."""
     W = f['w'] * s
     leg = f['leg_h'] * s
+    if parts:
+        mt = f['mattress_t'] * s
+        D_tot = (f['bed_l'] if opened else f['d']) * s
+        legs = []
+        for x in (4.5 * s, W - 4.5 * s):
+            legs.append(_taper_leg((x, 4.5 * s, leg + 0.3 * s), (x, 2.2 * s, 0.4 * s), 0.62 * s, 0.42 * s))
+            legs.append(_taper_leg((x, D_tot - 4.5 * s, leg + 0.3 * s), (x, D_tot - 3.5 * s, 1.1 * s), 0.6 * s, 0.45 * s))
+            legs.append(m3d.Manifold.cylinder(0.8 * s, 1.1 * s, 1.1 * s, 20).rotate([0, 90, 0]).translate(
+                [x - 0.4 * s, D_tot - 3.5 * s, 1.1 * s]))
+        rails = cube(2.5 * s, 2.5 * s, leg - 1.1 * s, W - 2.5 * s, D_tot - 2.5 * s, leg + 0.3 * s)
+        if not opened:
+            D, H, sh, bt = f['d'] * s, f['h'] * s, f['seat_h'] * s, f['back_t'] * s
+            matt = union([_rbox(0, 0, leg, W, D - bt + 0.6 * s, sh, 1.7 * s),
+                          _rbox(0, D - bt, leg, W, D, H, 1.7 * s)])
+            cw, cd = f['cushion_w'] * s, f['cushion_d'] * s
+            n = f.get('cushions', 2)
+            gap = (W - n * cw) / (n + 1)
+            cush = [_rbox(0, 0, 0, cw, cd, H - sh - 0.6 * s, 1.8 * s).rotate([11, 0, 0]).translate(
+                    [gap + i * (cw + gap), D - bt - cd + 0.4 * s, sh - 0.4 * s]) for i in range(n)]
+        else:
+            L, bh, ys = f['bed_l'] * s, f['bed_h'] * s, f['seat_unit_d'] * s
+            matt = union([_rbox(0, 0, leg, W, ys - 0.15 * s, bh, 1.5 * s),
+                          _rbox(0, ys + 0.15 * s, leg, W, L, bh, 1.5 * s)])
+            pw, gap = 22.5 * s, (W - 45.0 * s) / 3
+            cush = [_rbox(gap + i * (pw + gap), L - 16.5 * s, bh - 0.3 * s,
+                          gap + i * (pw + gap) + pw, L - 2.5 * s, bh + 3.4 * s, 1.4 * s) for i in range(2)]
+        return [('legs', union(legs)), ('frame', rails), ('mattress', matt), ('cushions', union(cush))]
     if not opened:
         D, H, sh = f['d'] * s, f['h'] * s, f['seat_h'] * s
         bt = f['back_t'] * s
-        parts = [cube(0, 0, 0, W, D - bt, sh), cube(0, D - bt, 0, W, D, H)]
+        pts = [cube(0, 0, 0, W, D - bt, sh), cube(0, D - bt, 0, W, D, H)]
         cw, cd = f['cushion_w'] * s, f['cushion_d'] * s
         n = f.get('cushions', 2)
         gap = (W - n * cw) / (n + 1)
         for i in range(n):                                       # cushions lean on the back, seat to back top
             x0 = gap + i * (cw + gap)
-            parts.append(cube(x0, D - bt - cd, sh - 0.1, x0 + cw, D - bt + 0.1, H - 1.0 * s))
-        body = union(parts)
+            pts.append(cube(x0, D - bt - cd, sh - 0.1, x0 + cw, D - bt + 0.1, H - 1.0 * s))
+        body = union(pts)
         cuts = _recessed_base(W, D, leg) + _grooves_front(W, H, s, zs=[sh - f['mattress_t'] * s])  # mattress edge
     else:
         L, bh = f['bed_l'] * s, f['bed_h'] * s
@@ -473,15 +798,46 @@ def _tube(points, r):
     return union([m3d.Manifold.batch_hull([sph[i], sph[i + 1]]) for i in range(len(sph) - 1)])
 
 
-def arc_lamp(f, s):
+def arc_lamp(f, s, parts=False):
     """Brightech Trilage as it stands in the owner's photo: a thick lower pole, then three thin rods rising
     together and fanning out like reeds, each ending at a tip with a short vertical drop rod to a drum shade.
     The rods only ever rise (max ~40 deg from vertical), so the shades are the only parts that need supports."""
     rb = f['base_dia'] * s / 2
-    parts = [m3d.Manifold.cylinder(max(1.2, f['base_t'] * s), rb, rb, 48)]
+    if parts:
+        bt = f['base_t'] * s
+        base = m3d.Manifold.cylinder(bt, rb, rb * 0.97, 56)
+        ph, bz = f['pole_h'] * s, f['bundle_z'] * s
+        brass = [m3d.Manifold.cylinder(1.2 * s, 1.3 * s, 0.85 * s, 28).translate([0, 0, bt - 0.1]),
+                 m3d.Manifold.cylinder(ph, 0.65 * s, 0.62 * s, 24).translate([0, 0, bt * 0.5]),
+                 m3d.Manifold.cylinder(1.4 * s, 0.82 * s, 0.82 * s, 24).translate([0, 0, bz - 0.7 * s])]
+        shades, bulbs = [], []
+        for arm in f['arms']:
+            a = math.radians(arm['dir_deg'])
+            ux, uy = math.cos(a), math.sin(a)
+            reach, tip = arm['reach'] * s, arm['tip_z'] * s
+            rise = tip - bz
+            Q = [(0, bz), (0, bz + 0.45 * rise), (reach * 0.6, tip - 0.3 * rise), (reach, tip)]
+            pts = [(0, 0, ph - 0.2)]
+            for i in range(25):
+                t = i / 24
+                w = ((1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3)
+                r_ = sum(c * q[0] for c, q in zip(w, Q))
+                z_ = sum(c * q[1] for c, q in zip(w, Q))
+                pts.append((r_ * ux, r_ * uy, z_))
+            brass.append(_tube(pts, 0.26 * s))
+            sh, sb = arm['shade_h'] * s, arm['shade_bottom_z'] * s
+            rs = arm['shade_dia'] * s / 2
+            cx, cy = reach * ux, reach * uy
+            brass.append(_tube([(cx, cy, tip), (cx, cy, sb + sh * 0.72)], 0.2 * s))
+            drum = m3d.Manifold.cylinder(sh, rs, rs * 0.96, 48) - m3d.Manifold.cylinder(
+                sh + 1.0, rs - 0.24 * s, rs * 0.96 - 0.24 * s, 48).translate([0, 0, -0.5])
+            shades.append(drum.translate([cx, cy, sb]))
+            bulbs.append(m3d.Manifold.sphere(1.35 * s, 20).translate([cx, cy, sb + sh * 0.52]))
+        return [('base', base), ('frame', union(brass)), ('shade', union(shades)), ('bulb', union(bulbs))]
+    pts = [m3d.Manifold.cylinder(max(1.2, f['base_t'] * s), rb, rb, 48)]
     rp = f['pole_mm'] / 2
     ph, bz = f['pole_h'] * s, f['bundle_z'] * s
-    parts.append(m3d.Manifold.cylinder(ph + 0.2, rp, rp, 24))
+    pts.append(m3d.Manifold.cylinder(ph + 0.2, rp, rp, 24))
     rr, rd = f['rod_mm'] / 2, f['drop_mm'] / 2
     for arm in f['arms']:
         a = math.radians(arm['dir_deg'])
@@ -489,19 +845,19 @@ def arc_lamp(f, s):
         reach, tip = arm['reach'] * s, arm['tip_z'] * s
         rise = tip - bz
         Q = [(0, bz), (0, bz + 0.45 * rise), (reach * 0.6, tip - 0.3 * rise), (reach, tip)]
-        pts = [(0, 0, ph - 0.2)]                                  # straight up out of the pole
+        p_ = [(0, 0, ph - 0.2)]                                   # straight up out of the pole
         for i in range(25):
             t = i / 24
             w = ((1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3)
             r_ = sum(c * q[0] for c, q in zip(w, Q))
             z_ = sum(c * q[1] for c, q in zip(w, Q))
-            pts.append((r_ * ux, r_ * uy, z_))
-        parts.append(_tube(pts, rr))
+            p_.append((r_ * ux, r_ * uy, z_))
+        pts.append(_tube(p_, rr))
         sh, sb = arm['shade_h'] * s, arm['shade_bottom_z'] * s
         rs = arm['shade_dia'] * s / 2
-        parts.append(_tube([(reach * ux, reach * uy, tip), (reach * ux, reach * uy, sb + sh - 0.1)], rd))   # drop rod
-        parts.append(m3d.Manifold.cylinder(sh, rs, rs, 48).translate([reach * ux, reach * uy, sb]))
-    return union(parts)
+        pts.append(_tube([(reach * ux, reach * uy, tip), (reach * ux, reach * uy, sb + sh - 0.1)], rd))   # drop rod
+        pts.append(m3d.Manifold.cylinder(sh, rs, rs, 48).translate([reach * ux, reach * uy, sb]))
+    return union(pts)
 
 
 def _parts(parts, out):
@@ -590,32 +946,34 @@ def bar_cart(f, s, parts=False):
 
 
 def shoe_cabinet(f, s, parts=False):
-    """Shoe cabinet: white carcass, three tilt-out doors (grooves), oak-look top, small gold knobs."""
+    """Shoe cabinet: white carcass, three tilt-out doors (shaker recessed panels), oak-look top, small gold knobs."""
     W, D, H = f['w'] * s, f['d'] * s, f['h'] * s
-    top_t, plinth = 1.0 * s, 1.5 * s
-    body = cube(0, 0, 0, W, D, H - top_t)
-    zs, z = [], H - top_t
+    top_t, plinth = 1.0 * s, 1.8 * s
+    carcass = union([
+        cube(0, 0.75 * s, plinth, W, D, H - top_t + 0.05),
+        cube(0.35 * s, 1.2 * s, 0, W - 0.35 * s, D, plinth + 0.1),
+    ])
+    top = _rslab(-0.3 * s, -0.4 * s, H - top_t, W + 0.3 * s, D, H, 0.3 * s, rz=0.1 * s)
+    doors, knobs, z = [], [], H - top_t - 0.2 * s
+    st = 1.35 * s
     for h in f['doors']:
-        z -= h * s
-        zs.append(z)
-    cuts = _grooves_front(W, H, s, zs=[H - top_t - 0.3 * s] + zs[:-1])
-    cuts += _recessed_base(W, D, plinth, r=0.8, sides='FLR')
-    top = cube(-0.3 * s, -0.4 * s, H - top_t, W + 0.3 * s, D, H)
-    knobs, z = [], H - top_t
-    for h in f['doors']:
-        zk = z - 2.5 * s
+        z0 = max(plinth + 0.2 * s, z - h * s + 0.22 * s)
+        slab = _rbox(0.45 * s, 0.2 * s, z0, W - 0.45 * s, 0.8 * s, z, 0.12 * s)
+        rec = cube(0.45 * s + st, 0.15 * s, z0 + st, W - 0.45 * s - st, 0.45 * s, z - st)
+        doors.append(slab - rec)
+        zk = z - 2.3 * s
         for x in (5 * s, W - 5 * s):
-            knobs.append(m3d.Manifold.cylinder(0.8 * s, 0.4 * s, 0.4 * s, 16).rotate([90, 0, 0]).translate([x, 0.05, zk]))
+            knobs.append(m3d.Manifold.cylinder(0.45 * s, 0.42 * s, 0.34 * s, 16).rotate([90, 0, 0]).translate([x, 0.25 * s, zk]))
         z -= h * s
-    return _parts(parts, [('body', body - union(cuts)), ('top', top), ('knobs', union(knobs))])
+    return _parts(parts, [('body', union([carcass] + doors)), ('top', top), ('knobs', union(knobs))])
 
 
 def mirror_leaning(f, s, parts=False):
     """Floor mirror leaning back against a wall: frame + glass face, tilted `lean` degrees (front at y = 0)."""
     W, H, T = f['w'] * s, f['h'] * s, f['t'] * s
     b = min(1.25 * s, W / 6)
-    frame = cube(0, 0.1 * s, 0, W, T, H)
-    glass = cube(b, 0, b, W - b, 0.15 * s, H - b)
+    frame = _rbox(0, 0.1 * s, 0, W, T, H, 0.28 * s)
+    glass = cube(b, 0, b, W - b, 0.25 * s, H - b)
     a = f['lean']
     lift = T * math.sin(math.radians(a))
     out = [(k, m.rotate([-a, 0, 0]).translate([0, 0, lift])) for k, m in (('frame', frame), ('glass', glass))]
@@ -649,22 +1007,27 @@ def office_chair(f, s, parts=False):
     for i in range(5):
         a = math.radians(90 + 72 * i)
         x, y = cx + base_r * math.cos(a), cy + base_r * math.sin(a)
-        frame.append(_tube([(cx, cy, 3.0 * s), (x, y, 2.6 * s)], 0.7 * s))
-        frame.append(m3d.Manifold.sphere(1.3 * s, 16).translate([x, y, 1.3 * s]))
-    frame.append(m3d.Manifold.cylinder(SH - 5 * s, 1.2 * s, 1.2 * s, 24).translate([cx, cy, 3.0 * s]))
-    sw, sd = 19.5 * s, 18.5 * s
-    seat_frame = cube(cx - sw / 2, cy - sd / 2 - 1 * s, SH - 2.5 * s, cx + sw / 2, cy + sd / 2 - 1 * s, SH - 1.0 * s)
-    mesh = [cube(cx - sw / 2 + 0.8 * s, cy - sd / 2 - 0.2 * s, SH - 1.2 * s, cx + sw / 2 - 0.8 * s, cy + sd / 2 - 1.8 * s, SH)]
-    bw, bh = 18.5 * s, H - SH - 1.0 * s
-    back = cube(-bw / 2, 0, 0, bw / 2, 1.2 * s, bh)
-    back_mesh = cube(-bw / 2 + 1.2 * s, -0.2 * s, 1.2 * s, bw / 2 - 1.2 * s, 1.0 * s, bh - 1.2 * s)
+        frame.append(_tube([(cx, cy, 3.0 * s), (x, y, 2.5 * s)], 0.65 * s))
+        frame.append(m3d.Manifold.cylinder(0.95 * s, 1.15 * s, 1.15 * s, 18).rotate([0, 90, 0]).translate([x - 0.47 * s, y, 1.15 * s]))
+        frame.append(_tube([(x, y, 1.3 * s), (x, y, 2.5 * s)], 0.45 * s))
+    frame.append(m3d.Manifold.cylinder(SH - 5 * s, 1.15 * s, 1.05 * s, 24).translate([cx, cy, 2.8 * s]))
+    sw, sd = 19.8 * s, 18.5 * s
+    seat_frame = _rslab(cx - sw / 2, cy - sd / 2 - 1 * s, SH - 2.3 * s, cx + sw / 2, cy + sd / 2 - 1 * s, SH - 0.8 * s, 2.8 * s, rz=0.35 * s)
+    seat_well = _rslab(cx - sw / 2 + 1.2 * s, cy - sd / 2 - 0.1 * s, SH - 1.5 * s, cx + sw / 2 - 1.2 * s, cy + sd / 2 - 2.0 * s, SH + 0.5 * s, 2.0 * s)
+    mesh = [_rslab(cx - sw / 2 + 1.1 * s, cy - sd / 2 - 0.2 * s, SH - 1.25 * s, cx + sw / 2 - 1.1 * s, cy + sd / 2 - 1.9 * s, SH - 0.15 * s, 2.0 * s, rz=0.2 * s)]
+    bw, bh = 18.8 * s, H - SH - 1.0 * s
+    back = _rbox(-bw / 2, 0, 0, bw / 2, 1.3 * s, bh, 2.4 * s)
+    back_cut = _rbox(-bw / 2 + 1.35 * s, -0.4 * s, 1.35 * s, bw / 2 - 1.35 * s, 1.7 * s, bh - 1.35 * s, 1.6 * s)
+    back_mesh = _rbox(-bw / 2 + 1.2 * s, 0.35 * s, 1.2 * s, bw / 2 - 1.2 * s, 0.95 * s, bh - 1.2 * s, 1.5 * s)
+    lumbar = _rbox(-bw / 2 + 1.0 * s, 0.7 * s, bh * 0.26, bw / 2 - 1.0 * s, 1.45 * s, bh * 0.44, 0.35 * s)
     tilt = lambda m: m.rotate([-12, 0, 0]).translate([cx, cy + sd / 2 - 1.5 * s, SH + 0.5 * s])
-    frame += [seat_frame, tilt(back - back_mesh), _tube([(cx, cy + sd / 2 - 3 * s, SH - 2 * s), (cx, cy + sd / 2 - 1 * s, SH + 1 * s)], 0.9 * s)]
+    frame += [seat_frame - seat_well, tilt(union([back - back_cut, lumbar])),
+              _tube([(cx, cy + sd / 2 - 3.5 * s, SH - 2 * s), (cx, cy + sd / 2 - 1.2 * s, SH + 1.2 * s)], 0.95 * s)]
     mesh.append(tilt(back_mesh))
-    for sx in (-1, 1):                                              # arms: post + pad
+    for sx in (-1, 1):                                              # arms: post + contoured pad
         x = cx + sx * (W / 2 - 1.5 * s)
-        frame.append(_tube([(x, cy + 3 * s, SH - 2 * s), (x, cy + 1 * s, SH + 8 * s)], 0.6 * s))
-        frame.append(cube(x - 1.6 * s, cy - 4 * s, SH + 7.5 * s, x + 1.6 * s, cy + 5 * s, SH + 8.6 * s))
+        frame.append(_tube([(x, cy + 2.5 * s, SH - 1.8 * s), (x, cy + 1.2 * s, SH + 7.8 * s)], 0.58 * s))
+        frame.append(_rbox(x - 1.65 * s, cy - 4.2 * s, SH + 7.5 * s, x + 1.65 * s, cy + 4.8 * s, SH + 8.6 * s, 0.5 * s))
     return _parts(parts, [('frame', union(frame)), ('mesh', union(mesh))])
 
 
@@ -916,8 +1279,8 @@ BUILDERS = {
     'dining-rect-30x48': leg_table, 'dining-rect-36x60': leg_table, 'dining-rect-36x78': leg_table,
     'dining-chair': dining_chair, 'rug-6x9': rug, 'rug-8x10': rug,
     'queen-bed': queen_bed, 'dresser-guest': dresser, 'dresser-main': dresser, 'nightstand': nightstand,
-    'sofa-bed-folded': lambda f, s: sofa_bed(f, s, opened=False),
-    'sofa-bed-open': lambda f, s: sofa_bed(f, s, opened=True),
+    'sofa-bed-folded': lambda f, s, parts=False: sofa_bed(f, s, opened=False, parts=parts),
+    'sofa-bed-open': lambda f, s, parts=False: sofa_bed(f, s, opened=True, parts=parts),
     'side-table': side_table,
     'drop-leaf-open': lambda f, s, parts=False: drop_leaf_table(f, s, folded=False, parts=parts),
     'drop-leaf-folded': lambda f, s, parts=False: drop_leaf_table(f, s, folded=True, parts=parts),

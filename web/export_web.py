@@ -123,6 +123,10 @@ IDEAS = [
      {'tv-stand': [(141.7, 60, 90)], 'bike-red-wall': [(116.3, 100, -90)]}),
 ]
 
+# The built-in "With guest" layout: a guest sleeps on the sectional, so the coffee table rolls east to clear a
+# walkway beside it and the desk chair tucks under the desk. Everything else matches EXAMPLE.
+GUEST = {'coffee-table': [(92, 104, -90)], 'office-chair': [(57.5, 24, 180)]}
+
 
 def idea_items(moves):
     out, used = [], {}
@@ -653,7 +657,8 @@ def main():
     old = json.loads(page[a + len(SCENE_OPEN):b])
     if args.reset_layouts:
         items = [[k, x, z, r] for k, x, z, r in EXAMPLE]
-        scene.update(main=dict(name='Standard', at=0, items=items), guest=dict(name='With Guest', at=0, items=items))
+        scene.update(main=dict(name='Standard', at=0, items=items),
+                     guest=dict(name='With Guest', at=0, items=idea_items(GUEST)))
     else:
         scene.update({k: old[k] for k in ('main', 'guest') if k in old})
     blob = json.dumps(scene, separators=(',', ':')).replace('<', '\\u003c')

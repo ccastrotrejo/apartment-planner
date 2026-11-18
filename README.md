@@ -55,7 +55,7 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
    L-shaped sectional, just the pot for plants). `IDEAS` lists alternative arrangements, each given as the
    pieces it moves away from `EXAMPLE`; they appear under **Layout ideas** in the Layouts sheet.
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
-   built-in Standard / With guest layouts with your `EXAMPLE`), then plain `python3 web/export_web.py` after
+   built-in Standard layout with your `EXAMPLE` and With guest with `EXAMPLE` adjusted by `GUEST`), then plain `python3 web/export_web.py` after
    each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.
 5. **Printing (optional):** `python3 furniture.py` writes each piece and packed print plates to
    `output/furniture/` (1:60 by default; legs and thin parts are thickened so they print).

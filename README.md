@@ -6,7 +6,8 @@ plan, every piece of furniture, and the page itself (`web/index.html`, one self-
 at 1:60.
 
 This repo is Residence A4 at Loden, Brooklyn (1 bed / 1 bath, 546 SF) and its furniture as an example. Fork it
-and swap in your own place.
+and swap in your own place. The furniture was read off a walkthrough video of the owner's current apartment,
+so its sizes are estimates until measured.
 
 ![The planner in 3D with see-through walls](docs/screenshot.png)
 
@@ -17,7 +18,7 @@ To share it, turn on GitHub Pages for your fork (Settings → Pages → deploy f
 folder) and open `https://<you>.github.io/<repo>/web/`.
 
 - Drag furniture in from the list; drag to move, R / Shift+R to rotate, F (or double-click) to switch
-  two-state pieces (sofa bed, drop-leaf table, a bike standing up, the dog curling up), Delete to remove,
+  two-state pieces (the lift-top coffee table), Delete to remove,
   Ctrl/Cmd+Z to undo.
 - **Lock** freezes the furniture so dragging only moves the camera. **See-through** makes the walls
   translucent. **Standard / With guest** switch between the two layouts built into the page.
@@ -48,7 +49,8 @@ Install the dependencies once: `python3 -m pip install -r requirements.txt`.
    Pieces built with `parts=True` return colored parts for the website. Add new pieces to `WEB_ONLY` if you
    don't want to print them.
 3. **Website list: `web/export_web.py`.** `PIECES` gives each piece its name, group and color(s);
-   `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south).
+   `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south). Collisions use each
+   piece's footprint rectangle; an L-shaped piece (the sectional) lists one rectangle per leg in `hits`.
 4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
    built-in Standard / With guest layouts with your `EXAMPLE`), then plain `python3 web/export_web.py` after
    each change. It rewrites the data block inside `web/index.html`; open or refresh the page to see it.

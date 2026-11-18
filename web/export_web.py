@@ -32,7 +32,7 @@ PIECES = {
     'sectional': ('Sectional, chaise on the left', 'Living room', {'upholstery': '#ece6da', 'legs': '#6b4a2f'}),
     'coffee-table': ('Lift-top coffee table', 'Living room', {'top': '#8a5a36', 'body': '#6f4528'}),
     'coffee-table-open': ('Lift-top coffee table, lifted', 'Living room', {'top': '#8a5a36', 'body': '#6f4528'}),
-    'tv-stand': ('TV on rolling stand', 'Living room', {'base': '#cbb08a', 'stand': '#eeece7', 'tv': '#1b1c1f'}),
+    'tv-stand': ('65″ TV on rolling stand', 'Living room', {'base': '#cbb08a', 'stand': '#eeece7', 'tv': '#1b1c1f'}),
     'tier-shelf': ('3-tier side shelf', 'Living room', '#4a3426'),
     'torchiere-lamp': ('Torchiere floor lamp', 'Living room', {'metal': '#c3c7cc', 'shade': '#f6f3ec'}),
     'standing-desk': ('Standing desk + monitors', 'Office & kitchen', {'top': '#6d5c4c', 'frame': '#1f1f1f',
@@ -90,7 +90,7 @@ EXAMPLE = [
     # living area: sectional on the west wall (chaise to the south) facing the TV on the bedroom partition,
     # desk under the north window, stools parked by the kitchen
     ('sectional', 32, 120, 90), ('rug-6x9', 62, 104, 90), ('coffee-table', 64.5, 104, -90), ('tv-stand', 121, 104, -90),
-    ('tier-shelf', 123, 139, -90), ('torchiere-lamp', 11, 45, 0), ('plant-monstera', 14, 14, 0),
+    ('tier-shelf', 123, 142, -90), ('torchiere-lamp', 11, 45, 0), ('plant-monstera', 14, 14, 0),
     ('standing-desk', 57.5, 14.5, 0), ('office-chair', 57.5, 36, 180), ('plant-zz', 93, 9, 0),
     ('counter-stool', 10, 181.5, 180), ('counter-stool', 29, 181.5, 180),
     # entry and kitchen corridor: coat rack by the door, shoe cabinet and mirror on the bath-side wall
@@ -172,95 +172,125 @@ def _ellipse(ru, rv, segs=40):
     return m3d.CrossSection([np.column_stack([ru * np.cos(a), rv * np.sin(a)])], m3d.FillRule.NonZero)
 
 
-def _cabinets(g, W, D, h, sink=None):
-    """Base cabinets with drawer-over-door fronts and a quartz top; optional undermount sink (local rect)."""
-    g['fixture_dark'].append(_B(0, 2.8, 0, W, D, 4.0))
-    body = _B(0, 0.85, 4.0, W, D, h - 1.5)
+UPPER_Y0, UPPER_Y1, UPPER_D = 54.0, 88.0, 13.0       # kitchen uppers (web only: drawn with full-height walls)
+
+
+def _cabinets(g, W, D, h, sink=None, end_panel=None):
+    """Handle-less slab base cabinets (greige wood) with a white quartz top, an optional undermount sink
+    (local rect) and an optional wood end panel at an exposed end ('lo' = u 0, 'hi' = u W). Adds the
+    full-height backsplash and pale slab uppers to the web-only upper_* layers."""
+    g['fixture_dark'].append(_B(0, 3.0, 0, W, D, 3.8))
+    body = _B(0, 0.85, 3.8, W, D, h - 1.25)
     if sink:
         su0, sv0, su1, sv1 = sink
         body = body - _RS(su0 - 0.9, sv0 - 0.9, h - 9.0, su1 + 0.9, sv1 + 0.9, h, 1.6)
     g['cab_wood'].append(body)
-    nb = max(1, round(W / 15.5))
+    nb = max(1, round(W / 18.0))
     du = W / nb
-    for i in range(nb):
-        ua, ub = i * du + 0.16, (i + 1) * du - 0.16
-        um = (ua + ub) / 2
-        g['cab_wood'].append(_RB(ua, 0.15, h - 7.4, ub, 0.88, h - 1.72, 0.12))
-        g['cab_wood'].append(_RB(ua, 0.15, 4.22, ub, 0.88, h - 7.75, 0.12))
-        g['fixture_metal'].append(_RB(um - 2.1, -0.25, h - 4.7, um + 2.1, 0.2, h - 4.35, 0.08))
-        pu = ub - 1.2 if i % 2 == 0 else ua + 1.2
-        g['fixture_metal'].append(_RB(pu - 0.18, -0.25, h - 13.5, pu + 0.18, 0.2, h - 9.2, 0.08))
-    slab = _RS(0, -0.65, h - 1.5, W, D, h, 0.25, rz=0.08)
+    for i in range(nb):                                  # full-height slab doors, 1/8" reveals, no pulls
+        g['cab_wood'].append(_B(i * du + 0.07, 0.1, 4.0, (i + 1) * du - 0.07, 0.86, h - 1.35))
+    if end_panel:
+        u0, u1 = (0.0, 0.75) if end_panel == 'lo' else (W - 0.75, W)
+        g['cab_wood'].append(_B(u0, 0.0, 0.0, u1, D, h - 1.25))
+    slab = _B(0, -0.6, h - 1.25, W, D, h)
     if sink:
         slab = slab - _RS(su0, sv0, h - 2.5, su1, sv1, h + 1.0, 1.25)
     g['countertop'].append(slab)
-    g['countertop'].append(_B(0, D - 0.55, h - 0.1, W, D, h + 3.5))
+    g['upper_backsplash'].append(_B(0, D - 0.35, h, W, D, UPPER_Y0))
+    _uppers(g, W, D, UPPER_Y0)
     if sink:
-        bowl = (_RS(su0 - 0.85, sv0 - 0.85, h - 8.6, su1 + 0.85, sv1 + 0.85, h - 1.35, 1.55)
-                - _RS(su0, sv0, h - 8.0, su1, sv1, h - 0.8, 1.25))
+        bowl = (_RS(su0 - 0.85, sv0 - 0.85, h - 8.6, su1 + 0.85, sv1 + 0.85, h - 1.15, 1.0)
+                - _RS(su0, sv0, h - 8.0, su1, sv1, h - 0.6, 0.8))
         g['fixture_metal'].append(bowl)
         cu, cv = (su0 + su1) / 2, (sv0 + sv1) / 2
         g['fixture_dark'].append(_CY(cu, cv, h - 8.05, h - 7.82, 1.55))
-        fv = min(sv1 + 2.1, D - 1.2)                     # high-arc gooseneck behind the bowl, spout over it
-        arc = [(cu, fv, h - 0.1), (cu, fv, h + 7.5)]
+        fv = min(sv1 + 2.1, D - 1.2)                     # pull-down gooseneck behind the bowl, spout over it
+        arc = [(cu, fv, h - 0.1), (cu, fv, h + 9.5)]
         for a_deg in np.linspace(0, 165, 14):
             rad = math.radians(a_deg)
-            arc.append((cu, fv - 3.6 * (1 - math.cos(rad)), h + 7.5 + 3.6 * math.sin(rad)))
+            arc.append((cu, fv - 3.4 * (1 - math.cos(rad)), h + 9.5 + 3.4 * math.sin(rad)))
         g['fixture_metal'].append(F._tube(arc, 0.42))
         g['fixture_metal'].append(_CY(cu, fv, h - 0.1, h + 1.2, 0.95, 0.8))
-        g['fixture_metal'].append(F._tube([(cu + 0.8, fv, h + 1.8), (cu + 3.2, fv, h + 3.2)], 0.22))
+        g['fixture_metal'].append(F._tube([(cu + 0.8, fv, h + 2.5), (cu + 2.8, fv, h + 4.5)], 0.22))
+
+
+def _uppers(g, W, D, y0):
+    """Pale handle-less slab uppers against the back wall, from y0 to the top of the run."""
+    v0 = D - UPPER_D
+    g['upper_cab_white'].append(_B(0, v0 + 0.8, y0, W, D, UPPER_Y1))
+    nb = max(1, round(W / 18.0))
+    du = W / nb
+    for i in range(nb):
+        g['upper_cab_white'].append(_B(i * du + 0.07, v0, y0 + 0.1, (i + 1) * du - 0.07, v0 + 0.82, UPPER_Y1 - 0.1))
 
 
 def _range(g, W, D, h):
-    """Slide-in stainless range: glass cooktop, oven door with window, drawer, knobs, bar handle."""
-    g['appliance'].append(_B(0.12, 0.85, 0, W - 0.12, D, h - 0.55))
+    """Slide-in gas range: stainless body, cast black grates over four burners, front controls, oven window."""
+    g['appliance'].append(_B(0.12, 0.85, 0, W - 0.12, D, h - 0.4))
     g['appliance'].append(_RB(0.22, 0.08, 0.5, W - 0.22, 0.9, 6.7, 0.15))
     g['appliance'].append(_RB(0.22, 0.08, 7.1, W - 0.22, 0.9, 29.8, 0.18) - _B(4.4, -0.2, 11.4, W - 4.4, 0.55, 25.4))
     g['fixture_dark'].append(_B(4.4, 0.28, 11.4, W - 4.4, 0.62, 25.4))
     g['appliance'].append(_RB(0.22, -0.05, 30.2, W - 0.22, 0.9, 35.45, 0.18))
-    g['fixture_dark'].append(_RS(0.2, 0.15, h - 0.58, W - 0.2, D - 0.5, h + 0.05, 0.2))
-    for fv, rb in ((0.29, 3.7), (0.66, 3.1)):
-        for fu in (0.27, 0.73):
-            bu, bv = W * fu, D * fv
-            g['fixture_metal'].append(_CY(bu, bv, h + 0.02, h + 0.11, rb) - _CY(bu, bv, h - 0.1, h + 0.2, rb - 0.24))
+    g['appliance'].append(_RS(0.2, 0.1, h - 0.45, W - 0.2, D - 0.5, h, 0.4))          # stainless cooktop
+    gv0, gv1, gy = 1.2, D - 1.6, h + 0.95
+    for ga, gb in ((0.9, W / 2 - 0.2), (W / 2 + 0.2, W - 0.9)):                    # two cast-iron grates
+        bars = [_B(ga, gv0, h, gb, gv0 + 0.5, gy), _B(ga, gv1 - 0.5, h, gb, gv1, gy),
+                _B(ga, gv0, h, ga + 0.5, gv1, gy), _B(gb - 0.5, gv0, h, gb, gv1, gy),
+                _B((ga + gb) / 2 - 0.25, gv0, h, (ga + gb) / 2 + 0.25, gv1, gy),
+                _B(ga, (gv0 + gv1) / 2 - 0.25, h, gb, (gv0 + gv1) / 2 + 0.25, gy)]
+        g['fixture_dark'].append(F.union(bars))
+    for fv in (0.3, 0.7):
+        for fu in (0.25, 0.75):
+            g['fixture_dark'].append(_CY(W * fu, gv0 + (gv1 - gv0) * fv, h, h + 0.55, 1.6, 1.4))
     g['fixture_metal'].append(F._tube([(3.0, 0.1, 27.8), (3.0, -1.1, 27.8), (W - 3.0, -1.1, 27.8), (W - 3.0, 0.1, 27.8)], 0.34))
-    for ku in np.linspace(4.0, W - 4.0, 5):
-        g['fixture_metal'].append(_CYV(ku, 0.0, 32.85, 0.65, 0.68, 0.62, 20))
+    for ku in np.linspace(3.5, W - 3.5, 5):
+        g['fixture_dark'].append(_CYV(ku, 0.0, 32.85, 0.75, 0.72, 0.66, 20))
+    # over-the-range microwave with pale uppers above it, and backsplash tile between
+    g['upper_backsplash'].append(_B(0, D - 0.35, h, W, D, UPPER_Y0))
+    g['upper_appliance'].append(_RB(0.3, D - 15.5, UPPER_Y0, W - 0.3, D - 0.4, UPPER_Y0 + 16.4, 0.3))
+    g['upper_fixture_dark'].append(_B(2.0, D - 15.62, UPPER_Y0 + 2.6, W - 7.0, D - 15.4, UPPER_Y0 + 13.6))
+    g['upper_fixture_metal'].append(F._tube([(W - 5.5, D - 15.4, UPPER_Y0 + 2.6), (W - 5.5, D - 16.6, UPPER_Y0 + 2.6),
+                                             (W - 5.5, D - 16.6, UPPER_Y0 + 13.6), (W - 5.5, D - 15.4, UPPER_Y0 + 13.6)], 0.32))
+    _uppers(g, W, D, UPPER_Y0 + 16.8)
 
 
 def _fridge(g, W, D, h):
-    """Stainless French-door fridge with a bottom freezer drawer and a door ice dispenser."""
-    um = W / 2
-    g['appliance'].append(_B(0.2, 2.1, 0, W - 0.2, D, h - 0.5))
-    g['appliance'].append(_RB(0.22, 0, 0.8, W - 0.22, 2.2, 27.2, 0.35))
-    g['appliance'].append(_RB(0.22, 0, 27.7, um - 0.18, 2.2, h, 0.35) - _B(3.2, -0.2, 38.2, um - 3.2, 1.35, 48.2))
-    g['fixture_dark'].append(_B(3.2, 1.15, 38.2, um - 3.2, 1.45, 48.2))
-    g['appliance'].append(_RB(um + 0.18, 0, 27.7, W - 0.22, 2.2, h, 0.35))
-    for hu in (um - 1.55, um + 1.55):
-        g['fixture_metal'].append(F._tube([(hu, 0.1, 31.5), (hu, -1.15, 31.5), (hu, -1.15, 58.5), (hu, 0.1, 58.5)], 0.36))
-    g['fixture_metal'].append(F._tube([(3.2, 0.1, 24.5), (3.2, -1.15, 24.5), (W - 3.2, -1.15, 24.5), (W - 3.2, 0.1, 24.5)], 0.36))
+    """Stainless bottom-freezer fridge (one door over a freezer drawer), boxed in by wood side panels and a
+    wood cabinet above (the panels' upper half and the cabinet are web-only upper layers)."""
+    pu0, pu1 = 0.8, W - 0.8
+    g['appliance'].append(_B(pu0 + 0.2, 2.1, 0, pu1 - 0.2, D, h - 0.5))
+    g['appliance'].append(_RB(pu0 + 0.22, 0, 0.8, pu1 - 0.22, 2.2, 27.2, 0.35))
+    g['appliance'].append(_RB(pu0 + 0.22, 0, 27.7, pu1 - 0.22, 2.2, h, 0.35))
+    hu = pu0 + 2.0
+    g['fixture_metal'].append(F._tube([(hu, 0.1, 34.0), (hu, -1.1, 34.0), (hu, -1.1, 58.0), (hu, 0.1, 58.0)], 0.34))
+    g['fixture_metal'].append(F._tube([(pu0 + 4.0, 0.1, 24.8), (pu0 + 4.0, -1.1, 24.8),
+                                       (pu1 - 4.0, -1.1, 24.8), (pu1 - 4.0, 0.1, 24.8)], 0.34))
+    for u0, u1 in ((0.0, 0.75), (W - 0.75, W)):
+        g['cab_wood'].append(_B(u0, 0.0, 0.0, u1, D, h))
+        g['upper_cab_wood'].append(_B(u0, 0.0, h, u1, D, UPPER_Y1))
+    g['upper_cab_wood'].append(_B(0.75, 0.8, h + 0.5, W - 0.75, D, UPPER_Y1))
+    g['upper_cab_wood'].append(_B(0.82, 0.0, h + 0.6, W - 0.82, 0.82, UPPER_Y1 - 0.1))
 
 
 def _vanity(g, W, D, h):
-    """Floating two-drawer wood vanity on thin metal legs, quartz top, porcelain undermount basin."""
+    """Two-drawer handle-less greige vanity on chrome legs, white top with an integrated basin."""
     cu, cv = W / 2, D / 2 - 1.6
     sw, sd = min(16.4, W - 6.0), min(11.2, D - 8.0)
     for lu in (1.1, W - 1.1):
         for lv in (1.2, D - 1.2):
-            g['fixture_metal'].append(_CY(lu, lv, 0, 6.3, 0.45))
-    g['cab_wood'].append(_B(0.2, 0.8, 6.0, W - 0.2, D, h - 1.25)
+            g['fixture_metal'].append(_CY(lu, lv, 0, 8.3, 0.4))
+    g['cab_wood'].append(_B(0.2, 0.8, 8.0, W - 0.2, D, h - 1.25)
                          - _RS(cu - sw / 2 - 1.2, cv - sd / 2 - 1.2, h - 7.2, cu + sw / 2 + 1.2, cv + sd / 2 + 1.2, h, 2.7))
-    mid = 6.0 + (h - 1.25 - 6.0) / 2
-    for ya, yb in ((6.2, mid - 0.18), (mid + 0.18, h - 1.48)):
-        g['cab_wood'].append(_RB(0.28, 0.12, ya, W - 0.28, 0.85, yb, 0.12))
-        g['fixture_metal'].append(_RB(cu - 3.2, -0.28, yb - 1.35, cu + 3.2, 0.15, yb - 1.0, 0.08))
+    mid = 8.0 + (h - 1.25 - 8.0) / 2
+    for ya, yb in ((8.1, mid - 0.25), (mid + 0.25, h - 2.0)):     # finger-pull gap above each drawer
+        g['cab_wood'].append(_B(0.25, 0.1, ya, W - 0.25, 0.85, yb))
     top = F.union([_RS(-0.3, -0.35, h - 1.25, W + 0.3, D, h, 0.3, rz=0.08), _B(-0.2, D - 0.55, h - 0.1, W + 0.2, D, h + 2.6)])
-    g['countertop'].append(top - _RS(cu - sw / 2, cv - sd / 2, h - 2.2, cu + sw / 2, cv + sd / 2, h + 0.8, 2.2))
+    g['ceramic'].append(top - _RS(cu - sw / 2, cv - sd / 2, h - 2.2, cu + sw / 2, cv + sd / 2, h + 0.8, 2.2))
     g['ceramic'].append(_RS(cu - sw / 2 - 0.8, cv - sd / 2 - 0.8, h - 6.8, cu + sw / 2 + 0.8, cv + sd / 2 + 0.8, h - 1.15, 2.6)
                         - _RS(cu - sw / 2, cv - sd / 2, h - 6.1, cu + sw / 2, cv + sd / 2, h - 0.6, 2.2))
     g['fixture_metal'].append(_CY(cu, cv, h - 6.15, h - 5.95, 1.0))
     fv = cv + sd / 2 + 1.9
-    g['fixture_metal'].append(F._tube([(cu, fv, h - 0.1), (cu, fv, h + 4.4), (cu, fv - 3.4, h + 3.9)], 0.35))
+    g['fixture_metal'].append(F._tube([(cu, fv, h - 0.1), (cu, fv, h + 5.4), (cu, fv - 3.6, h + 5.0)], 0.32))
 
 
 def _toilet(g, bowl, tank):
@@ -307,9 +337,15 @@ def _laundry(g, W, D, h):
     g['fixture_metal'].append(_CYV(W - 4.5, 1.0, h - 3.5, 0.65, 1.05, 0.95, 24))
 
 
+UPPER_KEYS = ('upper_cab_white', 'upper_cab_wood', 'upper_backsplash', 'upper_appliance', 'upper_fixture_dark',
+              'upper_fixture_metal')
+
+
 def web_fixtures(plan):
-    """Detailed multi-material built-ins, keyed by fixture kind and placed by each fixture's front."""
-    g = {k: [] for k in ('cab_wood', 'cab_white', 'countertop', 'ceramic', 'appliance', 'fixture_dark', 'fixture_metal')}
+    """Detailed multi-material built-ins, keyed by fixture kind and placed by each fixture's front. upper_* layers
+    (kitchen uppers, backsplash, microwave) rise above the 4' cut, so the page shows them with full walls only."""
+    keys = ('cab_wood', 'cab_white', 'countertop', 'ceramic', 'appliance', 'fixture_dark', 'fixture_metal') + UPPER_KEYS
+    g = {k: [] for k in keys}
     fixtures = list(plan.fixtures())
     doors = {d.get('name', ''): h for d, h, t, o, r in plan.doors()}
     tank = next((gm.bounds for f, gm in fixtures if 'tank' in f['name']), None)
@@ -321,12 +357,23 @@ def web_fixtures(plan):
         for k, ms in local.items():
             g[k] += [m.transform(np.array(M, float)) for m in ms]
 
+    def exposed_end(f, gm):
+        """'lo' / 'hi' if that end of a run has no other fixture against it (gets a wood end panel)."""
+        x0, z0, x1, z1 = gm.bounds
+        ends = {'E': (box(x0, z1, x1, z1 + 1), box(x0, z0 - 1, x1, z0)), 'W': (box(x0, z0 - 1, x1, z0), box(x0, z1, x1, z1 + 1)),
+                'N': (box(x1, z0, x1 + 1, z1), box(x0 - 1, z0, x0, z1)), 'S': (box(x0 - 1, z0, x0, z1), box(x1, z0, x1 + 1, z1))}
+        lo, hi = ends[f['front']]
+        others = [o for o2, o in fixtures if o is not gm]
+        free = lambda strip: not any(o.intersection(strip).area > 0.5 for o in others)
+        return 'hi' if free(hi) else ('lo' if free(lo) else None)
+
     for f, gm in fixtures:
         kind, b, h = f.get('kind'), gm.bounds, float(f['h'])
         if kind == 'cabinets':
             sink = plan.rect(f['sink'], frame=f['rect']) if f.get('sink') else None
+            end = exposed_end(f, gm)
             place(f['front'], b, lambda L, W, D, uv: _cabinets(
-                L, W, D, h, _local_rect(uv, (sink[0], sink[2], sink[1], sink[3])) if sink else None))
+                L, W, D, h, _local_rect(uv, (sink[0], sink[2], sink[1], sink[3])) if sink else None, end))
         elif kind == 'range':
             place(f['front'], b, lambda L, W, D, uv: _range(L, W, D, h))
         elif kind == 'fridge':
@@ -349,7 +396,7 @@ def web_fixtures(plan):
 
 
 def apartment(plan):
-    a = argparse.Namespace(scale=SCALE, wall_height=90.0, sill=30.0, glass_curb_mm=1.2, floor_mm=2.0,
+    a = argparse.Namespace(scale=SCALE, wall_height=90.0, sill=18.0, glass_curb_mm=1.2, floor_mm=2.0,
                            groove_mm=0.8, groove_depth_mm=0.6)
     comps, _, T, s = build.build_model(plan, a)
     fpoly = plan.footprint()

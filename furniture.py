@@ -32,8 +32,8 @@ FURNITURE = {
                          note='walnut lift-top coffee table with storage, on splayed legs; the top lifts to about '
                               '25 in and comes about 8 in forward (estimated)'),
     'tv-stand': dict(base_w=24, base_d=16, base_h=2.5, caster_h=2.0, pole_w=2.6, pole_d=1.8, pole_h=52, mount_z=44,
-                     mount_off=3.0, tv_w=48.4, tv_h=27.9, tv_t=2.5,
-                     note='55 in TV on a white rolling stand with a wood base; TV center about 44 in (estimated)'),
+                     mount_off=3.0, tv_w=57.1, tv_h=32.7, tv_t=2.4,
+                     note='65 in TV on a white rolling stand with a wood base; TV center about 44 in (estimated)'),
     'tier-shelf': dict(w=16, d=12, h=28, shelves=[3, 14.5, 27.4], post=1.0,
                        note='small 3-tier dark wood side shelf (estimated)'),
     'torchiere-lamp': dict(base_dia=11, base_t=1.2, h=70, pole_dia=0.9, shade_dia=15, shade_bot_dia=5, shade_h=6,
@@ -587,7 +587,7 @@ def bike(f, s, wall_rack=False, parts=False):
 BUILDERS = {
     'sectional': sectional, 'coffee-table': lift_top_table,
     'coffee-table-open': lambda f, s, parts=False: lift_top_table(f, s, lifted=True, parts=parts),
-    'tv-stand': tv_stand, 'tv-55': tv, 'tier-shelf': tier_shelf, 'torchiere-lamp': torchiere, 'rug-6x9': rug,
+    'tv-stand': tv_stand, 'tv-65': tv, 'tier-shelf': tier_shelf, 'torchiere-lamp': torchiere, 'rug-6x9': rug,
     'plant-monstera': plant, 'plant-zz': plant,
     'standing-desk': standing_desk, 'office-chair': office_chair, 'counter-stool': shell_stool,
     'coat-rack': coat_rack, 'shoe-cabinet': cane_shoe_cabinet, 'arched-mirror': arched_mirror,
@@ -595,7 +595,7 @@ BUILDERS = {
     'bike-black': bike, 'bike-red-wall': lambda f, s, parts=False: bike(f, s, wall_rack=True, parts=parts),
     'queen-bed': queen_bed, 'nightstand': nightstand, 'tripod-lamp': tripod_lamp,
 }
-SRC = {'tv-55': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes
+SRC = {'tv-65': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes
 
 
 def _pot(f):
@@ -615,7 +615,7 @@ WEB_ONLY = {'coffee-table-open', 'tier-shelf', 'torchiere-lamp', 'plant-monstera
 
 
 GROUPS = {   # which plate each piece goes on; COUNT = copies per plate
-    'living': ['sectional', 'coffee-table', 'tv-stand', 'tv-55', 'standing-desk', 'rug-6x9'],
+    'living': ['sectional', 'coffee-table', 'tv-stand', 'tv-65', 'standing-desk', 'rug-6x9'],
     'bedroom-entry': ['queen-bed', 'nightstand', 'shoe-cabinet', 'hall-cabinet'],
 }
 COUNT = {'nightstand': 2}
@@ -695,7 +695,7 @@ def plate_hours(item_secs, tallest_mm, lh=LAYER_H):
 def preview(pieces, names, s, path, title):
     meshes, x = [], 0.0
     for k in names:
-        if k == 'tv-55':
+        if k == 'tv-65':
             continue
         man = pieces[k]
         if k == 'tv-stand':

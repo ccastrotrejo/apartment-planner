@@ -20,6 +20,8 @@ folder) and open `https://<you>.github.io/<repo>/web/`.
 - Drag furniture in from the list; drag to move, R / Shift+R to rotate, F (or double-click) to switch
   two-state pieces (the lift-top coffee table), Delete to remove,
   Ctrl/Cmd+Z to undo.
+- For keyboard selection, focus the plan and press Enter to cycle through furniture. When unlocked, use the
+  arrow keys to move the selected piece (hold Shift for larger steps).
 - **Lock** freezes the furniture so dragging only moves the camera. **See-through** makes the walls
   translucent. **4′ walls / Full** switches the apartment cut. **Standard / With guest** switches between
   the two layouts built into the page.
@@ -30,10 +32,10 @@ folder) and open `https://<you>.github.io/<repo>/web/`.
   (The page was built as a Claude artifact, where it can also share saved layouts between visitors through a
   database. On GitHub Pages or from a file, those features stay off and everything else works.)
 - The furniture sidebar collapses to a slim rail on desktop and opens as a drawer on narrow screens. Every
-  piece has a 3D thumbnail, and the black bike is shown hanging on a wall while its printable model remains
-  a separate floor model.
-- The web model includes detailed cabinets, appliances, bath fixtures, wall and floor finishes, soft
-  shadows, PBR material responses, crisp plan outlines, and a 65-inch TV matched to the walkthrough.
+  piece has a 3D thumbnail. The black bike hangs above the bed on the main bedroom's east wall, and the TV
+  mounts on the living-room partition. The printable bike and rolling TV stand remain separate floor models.
+- The web model includes detailed cabinets, appliances, bath fixtures, wall and floor finishes, soft shadows,
+  PBR material responses, crisp plan outlines, and a 65-inch TV matched to the walkthrough.
 
 ## Make it your own
 

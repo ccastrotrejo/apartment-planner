@@ -36,7 +36,7 @@ PIECES = {
     'sectional': ('Sectional, chaise on the left', 'Living room', {'upholstery': '#ece6da', 'legs': '#6b4a2f'}),
     'coffee-table': ('Lift-top coffee table', 'Living room', {'top': '#8a5a36', 'body': '#6f4528'}),
     'coffee-table-open': ('Lift-top coffee table, lifted', 'Living room', {'top': '#8a5a36', 'body': '#6f4528'}),
-    'tv-stand': ('65″ TV on rolling stand', 'Living room', {'base': '#cbb08a', 'stand': '#eeece7', 'tv': '#1b1c1f'}),
+    'tv-stand': ('65″ wall-mounted TV', 'Living room', {'tv': '#1b1c1f', 'metal': '#222222'}),
     'tier-shelf': ('3-tier side shelf', 'Living room', '#4a3426'),
     'torchiere-lamp': ('Torchiere floor lamp', 'Living room', {'metal': '#c3c7cc', 'shade': '#f6f3ec'}),
     'standing-desk': ('Standing desk + monitors', 'Office & kitchen', {'top': '#6d5c4c', 'frame': '#1f1f1f',
@@ -52,9 +52,8 @@ PIECES = {
                                                                       'metal': '#222222'}),
     'arched-mirror': ('Arched floor mirror', 'Entry & storage', {'frame': '#2a2a2a', 'glass': '#d5e0e4'}),
     'hall-cabinet': ('Rounded 2-door cabinet', 'Entry & storage', {'wood': '#4b3527', 'pulls': '#c2a15a'}),
-    'bike-black': ('Black road bike on a wall rack', 'Entry & storage',
+    'bike-black': ('Black road bike on a wall rack', 'Bedroom',
                    {'frame': '#2c3027', **TIRES, 'rack': '#a0774c'}),
-    'bike-red-wall': ('Red road bike on a wall rack', 'Entry & storage', {'frame': '#b8322a', **TIRES, 'rack': '#a0774c'}),
     'rug-6x9': ('Rug 6 × 9\'', 'Rugs & plants', '#c9c8c3'),
     'plant-monstera': ('Leafy plant (grey pot)', 'Rugs & plants', {'pot': '#a3a39f', 'leaf': '#3f6b3a'}),
     'plant-zz': ('ZZ plant (terracotta pot)', 'Rugs & plants', {'pot': '#b5683f', 'leaf': '#2f5a2c'}),
@@ -69,7 +68,7 @@ SMOOTH = set()                                                   # organic shape
 # anchor 'back': the back edge stays put; 'center': the middle stays put.
 VARIANTS = {'coffee-table': ('coffee-table-open', 'Lift the top', 'back', 'Top lifts to 25″ and comes 8″ forward'),
             'coffee-table-open': ('coffee-table', 'Lower the top', 'back', None)}
-LIBNOTE = {'arched-mirror': 'leans out about 6″ at the bottom', 'bike-red-wall': 'hangs with its wheels 30″ off the floor'}
+LIBNOTE = {'arched-mirror': 'leans out about 6″ at the bottom'}
 TUCK = {'standing-desk'}
 
 # Material preset for each colored part (the page maps presets to roughness / metalness / sheen).
@@ -81,7 +80,7 @@ ROLE_MAT = {'upholstery': 'fabric', 'legs': 'wood', 'top': 'wood', 'body': 'wood
 PIECE_ROLE_MAT = {
     'queen-bed': {'frame': 'fabric'},                     # upholstered frame
     'tripod-lamp': {'legs': 'metal'},
-    'bike-black': {'frame': 'paint'}, 'bike-red-wall': {'frame': 'paint'},
+    'bike-black': {'frame': 'paint'},
     'rug-6x9': {'main': 'rug'},
 }
 
@@ -95,11 +94,11 @@ BATH_TILE = ('core_W_in', 'bath_E_in', 'bath_N', 'bath_S')        # walls tiled 
 EXAMPLE = [
     # A 30 in route runs from the entry around the island, through both rooms, and to every door and fixture.
     ('sectional', 32, 120, 90), ('rug-6x9', 62, 104, 90), ('coffee-table', 64.5, 104, -90),
-    ('tv-stand', 121, 104, -90), ('standing-desk', 57.5, 14.5, 0), ('office-chair', 57.5, 36, 180),
+    ('tv-stand', 127.2, 104, -90), ('standing-desk', 57.5, 14.5, 0), ('office-chair', 57.5, 36, 180),
     ('queen-bed', 201.2, 62.9, -90), ('nightstand', 233.85, 22.2, -90),
     ('nightstand', 233.85, 103.6, -90),
-    # Storage and bikes sit out of the circulation route. The stools line the living-side partition wall.
-    ('bike-red-wall', 116.25, 310, -90), ('bike-black', 48, 182, 180),
+    # The bike hangs above the bed on the east wall. The stools line the living-side partition wall.
+    ('bike-black', 232.6, 62.9, -90),
     ('shoe-cabinet', 67.5, 367.5, 90), ('coat-rack', 117, 236, 0), ('arched-mirror', 137.25, 137, 90),
     ('hall-cabinet', 121, 59, -90), ('tier-shelf', 104, 42.5, 0),
     ('counter-stool', 70.75, 200, 90), ('counter-stool', 70.75, 218, 90),
@@ -138,6 +137,13 @@ def idea_items(moves):
         else:
             out.append([k, x, z, r])
     return out
+
+
+def current_layout_items(items):
+    previous = {'bike-black': [48, 182, 180], 'tv-stand': [121, 104, -90]}
+    updated = {k: [x, z, r] for k, x, z, r in EXAMPLE}
+    return [[item[0], *updated[item[0]]] if item[1:] == previous.get(item[0]) else item
+            for item in items if item[0] in PIECES]
 
 
 def b64(arr):
@@ -526,6 +532,7 @@ def furniture_meshes():
         allv = np.vstack([v for _, v, _ in arrs]) / s        # real inches; x width, y depth (front at 0), z up
         x0, y0, z0 = allv.min(axis=0)
         x1, y1, z1 = allv.max(axis=0)
+        min_y = z0
         z0 = min(z0, 0.0)                                   # wall-hung pieces keep their height off the floor
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         meshes = []
@@ -543,6 +550,8 @@ def furniture_meshes():
         out[k] = dict(name=name, group=group, color=swatch, size=[round(W, 1), round(D, 1), round(H, 1)],
                       hit=[round(h, 2) for h in hits[0]], flat=k in FLAT, seat=k in SEATS, tuck=k in TUCK,
                       stack=STACK.get(k, False), support=k in SUPPORT, note=f.get('note', ''), parts=meshes)
+        if min_y > 0:
+            out[k]['minY'] = round(min_y, 2)
         if len(hits) > 1:
             out[k]['hits'] = [[round(h, 2) for h in r] for r in hits]
         if pivot:
@@ -654,6 +663,9 @@ def main():
                      guest=dict(name='With Guest', at=0, items=idea_items(GUEST)))
     else:
         scene.update({k: old[k] for k in ('main', 'guest') if k in old})
+        for key in ('main', 'guest'):
+            if key in scene:
+                scene[key]['items'] = current_layout_items(scene[key]['items'])
     wc = WalkCheck(plan, scene['plan'], scene['furniture'])
     layouts = ([('Standard', scene['main']['items']), ('With guest', scene['guest']['items'])] if 'main' in scene else [])
     layouts += [(i['name'], i['items']) for i in scene['ideas']]

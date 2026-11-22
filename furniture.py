@@ -33,7 +33,8 @@ FURNITURE = {
                               '25 in and comes about 8 in forward (estimated)'),
     'tv-stand': dict(base_w=24, base_d=16, base_h=2.5, caster_h=2.0, pole_w=2.6, pole_d=1.8, pole_h=52, mount_z=44,
                      mount_off=3.0, tv_w=57.1, tv_h=32.7, tv_t=2.4,
-                     note='65 in TV on a white rolling stand with a wood base; TV center about 44 in (estimated)'),
+                     note='65 in TV, wall-mounted in the web planner; printable rolling stand kept separately; '
+                          'TV center about 44 in (estimated)'),
     'tier-shelf': dict(w=16, d=12, h=28, shelves=[3, 14.5, 27.4], post=1.0,
                        note='small 3-tier dark wood side shelf (estimated)'),
     'torchiere-lamp': dict(base_dia=11, base_t=1.2, h=70, pole_dia=0.9, shade_dia=15, shade_bot_dia=5, shade_h=6,
@@ -74,10 +75,6 @@ FURNITURE = {
                        saddle_z=37.5, lift=30, note='black road bike, hung on the web plan and printable as a floor model: '
                                            'about 67 x 17 x 40 in (estimated from '
                                            'typical 54 cm geometry)'),
-    'bike-red-wall': dict(wheelbase=39.2, wheel_d=27.0, tire=1.0, bars=16.0, seat_tube=21.5, stack=21.0, reach=15.0,
-                          saddle_z=37.0, lift=30,
-                          note='red road bike hung level on a wood wall rack, wheels about 30 in off the floor '
-                               '(estimated)'),
     # Bedroom
     'queen-bed': dict(frame_w=61, frame_l=81, frame_h=14, mattress_w=60, mattress_l=80, mattress_t=10, throw_w=22,
                       note='queen mattress on a low platform frame (no headboard), white duvet, knit throw; mattress '
@@ -251,7 +248,15 @@ def standing_desk(f, s, parts=False):
 def tv_stand(f, s, parts=False):
     """Rolling TV stand: base plate on 4 casters (shown as a recessed band so it prints solid), one pole, and a mount
     block with a 45-degree underside (no supports). For printing, the TV is a separate flat slab (`tv`) glued onto
-    the mount block's front face; with parts=True the TV comes on the stand. Front (TV side) at y = 0."""
+    the mount block's front face; with parts=True only the wall-mounted TV and bracket are shown.
+    Front (TV side) at y = 0."""
+    if parts:
+        w, h, t = f['tv_w'] * s, f['tv_h'] * s, f['tv_t'] * s
+        center = f['mount_z'] * s
+        screen = cube(0, 0, center - h / 2, w, t, center + h / 2)
+        mount = cube(w / 2 - 4 * s, t, center - 4 * s,
+                     w / 2 + 4 * s, t + s, center + 4 * s)
+        return [('tv', screen), ('metal', mount)]
     W, D = f['base_w'] * s, f['base_d'] * s
     bh, ch = f['base_h'] * s, f['caster_h'] * s
     base = cube(0, 0, 0, W, D, bh) - union(_recessed_base(W, D, ch))
@@ -267,9 +272,7 @@ def tv_stand(f, s, parts=False):
     lower = m3d.Manifold.cube([bw, 0.01, 0.01]).translate([cx - bw / 2, y0 - 0.01, mz - bhh / 2 - off])
     upper = m3d.Manifold.cube([bw, off + 0.01, bhh]).translate([cx - bw / 2, y0 - off, mz - bhh / 2])
     stand = union([pole, collar, m3d.Manifold.batch_hull([lower, upper])])
-    if not parts:
-        return union([base, stand])
-    return [('base', base), ('stand', stand), ('tv', tv_on_stand(f, s))]
+    return union([base, stand])
 
 
 def queen_bed(f, s, parts=False):
@@ -588,7 +591,6 @@ BUILDERS = {
     'coat-rack': coat_rack, 'shoe-cabinet': cane_shoe_cabinet, 'arched-mirror': arched_mirror,
     'hall-cabinet': round_cabinet,
     'bike-black': lambda f, s, parts=False: bike(f, s, wall_rack=parts, parts=parts),
-    'bike-red-wall': lambda f, s, parts=False: bike(f, s, wall_rack=True, parts=parts),
     'queen-bed': queen_bed, 'nightstand': nightstand, 'tripod-lamp': tripod_lamp,
 }
 SRC = {'tv-65': 'tv-stand', 'coffee-table-open': 'coffee-table'}    # pieces built from another piece's sizes
@@ -607,7 +609,7 @@ FOOTPRINTS = {
     'plant-monstera': _pot, 'plant-zz': _pot,
 }
 WEB_ONLY = {'coffee-table-open', 'tier-shelf', 'torchiere-lamp', 'plant-monstera', 'plant-zz', 'office-chair',
-            'counter-stool', 'coat-rack', 'arched-mirror', 'bike-black', 'bike-red-wall', 'tripod-lamp'}   # not printed
+            'counter-stool', 'coat-rack', 'arched-mirror', 'bike-black', 'tripod-lamp'}   # not printed
 
 
 GROUPS = {   # which plate each piece goes on; COUNT = copies per plate

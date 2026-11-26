@@ -1,7 +1,7 @@
 import {
-  fromPath64,
-  rectsToPaths64,
-  unionPaths,
+  cleanRing,
+  rectsToRegion,
+  signedPolyArea,
 } from '../geometry/plan2d';
 import type {
   ApartmentSpec,
@@ -222,6 +222,15 @@ export const LODEN_A4_SPEC: ApartmentSpec = {
       },
     },
   ],
+  allowedLayoutExceptions: [
+    {
+      requiredPieces: [
+        ['bike-black', 142.8, 84, 90],
+        ['queen-bed', 201.2, 62.9, -90],
+      ],
+      allowedProblem: 'no 24" access to the left of queen bed',
+    },
+  ],
 };
 
 export function buildIdeaItems(
@@ -423,23 +432,19 @@ export function solveApartmentPlan(spec: ApartmentSpec = LODEN_A4_SPEC): SolvedP
   }));
   const entryBounds = resolveRect(spec.entryOpening);
 
-  // Outer apartment footprint = exterior ring of union(walls + windows + entryOpening)
-  const shellPaths = unionPaths(rectsToPaths64([...walls, ...windows.map((w) => w.r), entryBounds]));
-  let bestPath = shellPaths[0];
+  // Outer apartment footprint = largest exterior ring of union(walls + windows + entryOpening)
+  const shellRegion = rectsToRegion([...walls, ...windows.map((w) => w.r), entryBounds]);
+  let footprint: Vec2[] = [];
   let bestArea = -Infinity;
-  for (const p of shellPaths) {
-    const a = Math.abs(
-      p.reduce((acc, pt, idx) => {
-        const nxt = p[(idx + 1) % p.length];
-        return acc + pt.x * nxt.y - nxt.x * pt.y;
-      }, 0),
-    );
+  for (const poly of shellRegion) {
+    if (poly.length === 0) continue;
+    const outer = cleanRing(poly[0]);
+    const a = Math.abs(signedPolyArea(outer));
     if (a > bestArea) {
       bestArea = a;
-      bestPath = p;
+      footprint = outer;
     }
   }
-  const footprint = fromPath64(bestPath);
   let bx0 = Infinity;
   let bz0 = Infinity;
   let bx1 = -Infinity;

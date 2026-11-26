@@ -433,7 +433,7 @@ const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
   );
 
   const shadowTex = useMemo(() => getSoftContactShadowTexture(), []);
-  const showContactShadow = view === '3d' && !spec.flat && !spec.minY && item.on === null && shadowTex !== null;
+  const showContactShadow = view === '3d' && !spec.flat && !spec.minY && shadowTex !== null;
   const hitRects = spec.hits ?? [spec.hit];
 
   return (

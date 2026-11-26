@@ -1,20 +1,19 @@
-import { Clipper, Path64, Paths64, Point64, PointInPolygonResult } from 'clipper2-js';
 import { FURNITURE_CATALOG } from '../furniture/catalog';
 import {
-  areaOfPaths,
-  diffPaths,
+  cleanRing,
+  diffRegions,
+  distPointToRing,
   expandConvexPoly,
-  fromPath64,
-  intersectPaths,
-  polysToPaths64,
-  rectsToPaths64,
+  intersectRegions,
+  type PlanRegion,
+  polysToRegion,
+  rectsToRegion,
   rectToPoly,
+  regionArea,
   segmentCapsulePoly,
-  toPath64,
   transformHitCorners,
-  unionPaths,
 } from '../geometry/plan2d';
-import type { Compass, HitRect, PlacementTuple, Rect4, SolvedPlan, Vec2 } from '../types';
+import type { Compass, HitRect, LayoutExceptionRule, PlacementTuple, Rect4, SolvedPlan, Vec2 } from '../types';
 
 const WALK_WIDTH = 30.0;
 const ACCESS_WIDTH = 24.0;
@@ -60,25 +59,6 @@ function circlePoly([cx, cz]: Vec2, r: number, segs = 20): Vec2[] {
   return pts;
 }
 
-function distPointToPath([px, pz]: Vec2, path: Path64): number {
-  const pt64 = new Point64(Math.round(px * 1000), Math.round(pz * 1000));
-  const pip = Clipper.pointInPolygon(pt64, path);
-  if (pip !== PointInPolygonResult.IsOutside) return 0;
-  const pts = fromPath64(path);
-  let best = Infinity;
-  for (let i = 0; i < pts.length; i++) {
-    const [x1, z1] = pts[i];
-    const [x2, z2] = pts[(i + 1) % pts.length];
-    const dx = x2 - x1;
-    const dz = z2 - z1;
-    const denom = dx * dx + dz * dz;
-    const t = denom > 1e-9 ? Math.max(0, Math.min(1, ((px - x1) * dx + (pz - z1) * dz) / denom)) : 0;
-    const d = Math.hypot(px - x1 - t * dx, pz - z1 - t * dz);
-    if (d < best) best = d;
-  }
-  return best;
-}
-
 export function pieceWorldPolys(piece: string, x: number, z: number, rotation: number): Vec2[][] {
   const spec = FURNITURE_CATALOG[piece];
   const rects = spec.hits ?? [spec.hit];
@@ -86,22 +66,21 @@ export function pieceWorldPolys(piece: string, x: number, z: number, rotation: n
 }
 
 export class WalkCheck {
-  private readonly base: Paths64;
-  private readonly footprintPaths: Paths64;
+  readonly allowedExceptions: ReadonlyArray<LayoutExceptionRule>;
+  private readonly base: PlanRegion;
+  private readonly footprintRegion: PlanRegion;
   private readonly footprintRing: ReadonlyArray<Vec2>;
   private readonly staticObstaclePolys: Vec2[][];
-  private readonly erodedStaticCache = new Map<number, Paths64>();
-  private readonly doorSwings: Array<{ name: string; paths: Paths64 }>;
-  private readonly fixtureZones: Array<{ name: string; paths: Paths64 }>;
-  private readonly targets: Array<{ name: string; paths: Paths64 }>;
+  private readonly erodedStaticCache = new Map<number, PlanRegion>();
+  private readonly doorSwings: Array<{ name: string; region: PlanRegion }>;
+  private readonly fixtureZones: Array<{ name: string; region: PlanRegion }>;
+  private readonly targets: Array<{ name: string; region: PlanRegion }>;
   private readonly entryPt: Vec2;
 
   constructor(plan: SolvedPlan) {
+    this.allowedExceptions = plan.spec.allowedLayoutExceptions ?? [];
     this.footprintRing = plan.footprint;
-    this.footprintPaths = new Paths64();
-    const fpPath = toPath64(plan.footprint);
-    if (Clipper.area(fpPath) < 0) fpPath.reverse();
-    this.footprintPaths.push(fpPath);
+    this.footprintRegion = polysToRegion([plan.footprint]);
 
     const staticRects: Rect4[] = [
       ...plan.walls,
@@ -109,16 +88,16 @@ export class WalkCheck {
       ...plan.windows.map((w) => w.r),
     ];
     this.staticObstaclePolys = staticRects.map(rectToPoly);
-    const staticBlocked = unionPaths(rectsToPaths64(staticRects));
-    this.base = diffPaths(this.footprintPaths, staticBlocked);
+    const staticBlocked = rectsToRegion(staticRects);
+    this.base = diffRegions(this.footprintRegion, staticBlocked);
 
     this.doorSwings = plan.doors.map((d) => ({
       name: d.name,
-      paths: polysToPaths64([d.poly]),
+      region: polysToRegion([d.poly]),
     }));
 
     this.fixtureZones = [];
-    const rawTargets: Array<{ name: string; paths: Paths64 }> = [];
+    const rawTargets: Array<{ name: string; region: PlanRegion }> = [];
 
     const tank = plan.fixtures.find((f) => f.def.name.includes('tank'))?.bounds;
     const hinges = new Map<string, Vec2>(plan.doors.map((d) => [d.name, d.hinge]));
@@ -145,9 +124,9 @@ export class WalkCheck {
             : front === 'N'
               ? [x0, z0 - c, x1, z0]
               : [x0, z1, x1, z1 + c];
-      const zone = intersectPaths(rectsToPaths64([boxRect]), this.base);
-      this.fixtureZones.push({ name: fx.def.name, paths: zone });
-      rawTargets.push({ name: `the ${fx.def.name}`, paths: zone });
+      const zone = intersectRegions(rectsToRegion([boxRect]), this.base);
+      this.fixtureZones.push({ name: fx.def.name, region: zone });
+      rawTargets.push({ name: `the ${fx.def.name}`, region: zone });
     }
 
     for (const door of plan.doors) {
@@ -161,7 +140,7 @@ export class WalkCheck {
       for (const sign of [1, -1]) {
         rawTargets.push({
           name: `the ${door.name} door`,
-          paths: polysToPaths64([circlePoly([mx + sign * 20 * nx, mz + sign * 20 * nz], 4)]),
+          region: polysToRegion([circlePoly([mx + sign * 20 * nx, mz + sign * 20 * nz], 4)]),
         });
       }
     }
@@ -177,7 +156,7 @@ export class WalkCheck {
       for (const sign of [1, -1]) {
         rawTargets.push({
           name: 'the closet slider',
-          paths: polysToPaths64([circlePoly([mx + sign * 20 * nx, mz + sign * 20 * nz], 4)]),
+          region: polysToRegion([circlePoly([mx + sign * 20 * nx, mz + sign * 20 * nz], 4)]),
         });
       }
     }
@@ -186,11 +165,11 @@ export class WalkCheck {
     this.entryPt = [entryDoor.hinge[0] - 19, entryDoor.hinge[1] - 20];
     const emptyReach = this.reachable([], WALK_WIDTH / 2);
     this.targets = rawTargets.filter(
-      (t) => emptyReach !== null && areaOfPaths(intersectPaths(t.paths, emptyReach)) > 1e-3,
+      (t) => emptyReach !== null && regionArea(intersectRegions(t.region, emptyReach)) > 1e-3,
     );
   }
 
-  private getErodedStaticBase(radius: number): Paths64 {
+  private getErodedStaticBase(radius: number): PlanRegion {
     const cached = this.erodedStaticCache.get(radius);
     if (cached) return cached;
     const capsules: Vec2[][] = [];
@@ -202,47 +181,34 @@ export class WalkCheck {
       }
     }
     const expandedStatic = this.staticObstaclePolys.map((p) => expandConvexPoly(p, radius, 5));
-    const clip = unionPaths(polysToPaths64([...capsules, ...expandedStatic]));
-    const res = diffPaths(this.footprintPaths, clip);
+    const clip = polysToRegion([...capsules, ...expandedStatic]);
+    const res = diffRegions(this.footprintRegion, clip);
     this.erodedStaticCache.set(radius, res);
     return res;
   }
 
-  /**
-   * Exact morphological erosion `(Footprint \ Obstacles) ⊖ Disk(radius)` using analytical
-   * convex-polygon disk expansion + Clipper boolean Difference (avoids ClipperOffset artifacts).
-   */
-  private reachable(solidPolys: ReadonlyArray<ReadonlyArray<Vec2>>, radius = WALK_WIDTH / 2): Paths64 | null {
+  private reachable(solidPolys: ReadonlyArray<ReadonlyArray<Vec2>>, radius = WALK_WIDTH / 2): PlanRegion | null {
     const staticEroded = this.getErodedStaticBase(radius);
     const eroded =
       solidPolys.length > 0
-        ? diffPaths(
-            staticEroded,
-            unionPaths(polysToPaths64(solidPolys.map((p) => expandConvexPoly(p, radius, 5)))),
-          )
+        ? diffRegions(staticEroded, polysToRegion(solidPolys.map((p) => expandConvexPoly(p, radius, 5))))
         : staticEroded;
 
-    const shells = eroded.filter((p) => Clipper.area(p) > 0);
-    if (shells.length === 0) return null;
+    if (eroded.length === 0) return null;
 
-    let best: Path64 | null = null;
+    let bestPoly: PlanRegion[number] | null = null;
     let bestDist = Infinity;
-    for (const shell of shells) {
-      const d = distPointToPath(this.entryPt, shell);
+    for (const poly of eroded) {
+      if (poly.length === 0) continue;
+      const outer = cleanRing(poly[0]);
+      if (outer.length < 3) continue;
+      const d = distPointToRing(this.entryPt, outer);
       if (d < radius && d < bestDist) {
         bestDist = d;
-        best = shell;
+        bestPoly = poly;
       }
     }
-    if (!best) return null;
-
-    const holes = eroded.filter((p) => {
-      if (Clipper.area(p) >= 0 || p.length === 0) return false;
-      return Clipper.pointInPolygon(new Point64(p[0].x, p[0].y), best!) !== PointInPolygonResult.IsOutside;
-    });
-    const out = new Paths64();
-    out.push(best, ...holes);
-    return out;
+    return bestPoly ? [bestPoly] : null;
   }
 
   problems(items: ReadonlyArray<PlacementTuple>): string[] {
@@ -254,20 +220,20 @@ export class WalkCheck {
       if (!spec || spec.flat) continue;
 
       const polys = pieceWorldPolys(piece, x, z, rotation);
-      const itemPaths = polysToPaths64(polys);
+      const itemRegion = polysToRegion(polys);
       if (!spec.seat) {
         solidPolys.push(...polys);
       }
 
-      for (const { name, paths: swing } of this.doorSwings) {
-        if (areaOfPaths(intersectPaths(itemPaths, swing)) > 1.0) {
+      for (const { name, region: swing } of this.doorSwings) {
+        if (regionArea(intersectRegions(itemRegion, swing)) > 1.0) {
           problems.add(`${spec.name} blocks the ${name} door swing`);
         }
       }
 
-      for (const { name, paths: zone } of this.fixtureZones) {
+      for (const { name, region: zone } of this.fixtureZones) {
         if (spec.seat && name === 'counter') continue;
-        if (areaOfPaths(intersectPaths(itemPaths, zone)) > 1.0) {
+        if (regionArea(intersectRegions(itemRegion, zone)) > 1.0) {
           problems.add(`${spec.name} is in front of the ${name}`);
         }
       }
@@ -278,8 +244,8 @@ export class WalkCheck {
       return [...problems, `no ${WALK_WIDTH}" path from the entry`].sort();
     }
 
-    for (const { name, paths: target } of this.targets) {
-      if (areaOfPaths(intersectPaths(target, walkable)) <= 1e-3) {
+    for (const { name, region: target } of this.targets) {
+      if (regionArea(intersectRegions(target, walkable)) <= 1e-3) {
         problems.add(`no ${WALK_WIDTH}" path to ${name}`);
       }
     }
@@ -298,8 +264,8 @@ export class WalkCheck {
       };
       for (const side of sides) {
         const targetPoly = transformHitCorners(x, z, rotation, accessRects[side]);
-        const targetPaths = polysToPaths64([targetPoly]);
-        const ok = localAccess !== null && areaOfPaths(intersectPaths(targetPaths, localAccess)) > 1e-3;
+        const targetRegion = polysToRegion([targetPoly]);
+        const ok = localAccess !== null && regionArea(intersectRegions(targetRegion, localAccess)) > 1e-3;
         if (!ok) {
           const loc = spec.name.toLowerCase();
           problems.add(
@@ -319,20 +285,20 @@ export function unexpectedLayoutProblems(
   checker: WalkCheck,
   items: ReadonlyArray<PlacementTuple>,
 ): string[] {
-  const problems = checker.problems(items);
-  const hasDefaultBike = items.some(
-    ([k, x, z, r]) => k === 'bike-black' && x === 142.8 && z === 84 && r === 90,
-  );
-  const hasDefaultBed = items.some(
-    ([k, x, z, r]) => k === 'queen-bed' && x === 201.2 && z === 62.9 && r === -90,
-  );
-  const warning = 'no 24" access to the left of queen bed';
-  if (hasDefaultBike && hasDefaultBed && problems.includes(warning)) {
-    const withoutBike = items.filter(
-      ([k, x, z, r]) => !(k === 'bike-black' && x === 142.8 && z === 84 && r === 90),
+  let problems = checker.problems(items);
+  for (const rule of checker.allowedExceptions) {
+    if (!problems.includes(rule.allowedProblem)) continue;
+    const allPresent = rule.requiredPieces.every(([rk, rx, rz, rr]) =>
+      items.some(([k, x, z, r]) => k === rk && x === rx && z === rz && r === rr),
     );
-    if (!checker.problems(withoutBike).includes(warning)) {
-      return problems.filter((p) => p !== warning);
+    if (!allPresent) continue;
+    const [primaryPiece] = rule.requiredPieces;
+    const withoutPrimary = items.filter(
+      ([k, x, z, r]) =>
+        !(k === primaryPiece[0] && x === primaryPiece[1] && z === primaryPiece[2] && r === primaryPiece[3]),
+    );
+    if (!checker.problems(withoutPrimary).includes(rule.allowedProblem)) {
+      problems = problems.filter((p) => p !== rule.allowedProblem);
     }
   }
   return problems;

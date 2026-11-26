@@ -1,50 +1,44 @@
-import {
-  Clipper,
-  EndType,
-  FillRule,
-  JoinType,
-  Path64,
-  Paths64,
-  Point64,
-  PointInPolygonResult,
-} from 'clipper2-js';
+import * as polygonClipping from 'polygon-clipping';
 import * as THREE from 'three';
 import type { HitRect, Rect4, Vec2 } from '../types';
 
-const SCALE = 1000; // 0.001 inch integer precision for Clipper64
+export type PlanRegion = polygonClipping.MultiPolygon;
 
 export interface PolygonWithHoles {
   readonly outer: Vec2[];
   readonly holes: Vec2[][];
 }
 
-export function toPath64(pts: ReadonlyArray<Vec2>): Path64 {
-  const p = new Path64();
-  for (const [x, z] of pts) {
-    p.push(new Point64(Math.round(x * SCALE), Math.round(z * SCALE)));
-  }
-  return p;
-}
-
-export function fromPath64(path: Path64): Vec2[] {
-  const raw = path.map((pt) => [pt.x / SCALE, pt.y / SCALE] as const);
+export function cleanRing(raw: ReadonlyArray<readonly [number, number]>): Vec2[] {
   const out: Vec2[] = [];
   for (const [x, z] of raw) {
     const prev = out[out.length - 1];
-    if (!prev || Math.hypot(x - prev[0], z - prev[1]) > 1e-3) {
+    if (!prev || Math.hypot(x - prev[0], z - prev[1]) > 1e-4) {
       out.push([x, z]);
     }
   }
   while (out.length > 2) {
     const first = out[0];
     const last = out[out.length - 1];
-    if (Math.hypot(first[0] - last[0], first[1] - last[1]) <= 1e-3) {
+    if (Math.hypot(first[0] - last[0], first[1] - last[1]) <= 1e-4) {
       out.pop();
     } else {
       break;
     }
   }
   return out;
+}
+
+const SNAP = 1000;
+const snap = (v: number): number => Math.round(v * SNAP) / SNAP;
+
+function toClosedPairRing(pts: ReadonlyArray<Vec2>): polygonClipping.Ring {
+  // Snap to a 0.001" grid (same precision Clipper used) so the sweep line never sees near-coincident floats.
+  const cleaned = cleanRing(pts.map(([x, z]) => [snap(x), snap(z)] as const));
+  if (cleaned.length < 3) return [];
+  const pairs: polygonClipping.Pair[] = cleaned.map(([x, z]) => [x, z]);
+  pairs.push([cleaned[0][0], cleaned[0][1]]);
+  return pairs;
 }
 
 export function rectToPoly([x0, z0, x1, z1]: Rect4): Vec2[] {
@@ -56,106 +50,124 @@ export function rectToPoly([x0, z0, x1, z1]: Rect4): Vec2[] {
   ];
 }
 
-export function rectToPath64(r: Rect4): Path64 {
-  return toPath64(rectToPoly(r));
-}
-
-export function rectsToPaths64(rects: ReadonlyArray<Rect4>): Paths64 {
-  const out = new Paths64();
-  for (const r of rects) {
-    const p = rectToPath64(r);
-    if (Clipper.area(p) < 0) p.reverse();
-    out.push(p);
+export function polysToRegion(polys: ReadonlyArray<ReadonlyArray<Vec2>>): PlanRegion {
+  const valid: polygonClipping.Polygon[] = [];
+  for (const p of polys) {
+    const ring = toClosedPairRing(p);
+    if (ring.length >= 4) valid.push([ring]);
   }
-  return out;
+  if (valid.length === 0) return [];
+  return valid.length === 1 ? valid : polygonClipping.union(valid[0], ...valid.slice(1));
 }
 
-export function polysToPaths64(polys: ReadonlyArray<ReadonlyArray<Vec2>>): Paths64 {
-  const out = new Paths64();
-  for (const poly of polys) {
-    const p = toPath64(poly);
-    if (Clipper.area(p) < 0) p.reverse();
-    out.push(p);
-  }
-  return out;
+export function rectsToRegion(rects: ReadonlyArray<Rect4>, pad = 0): PlanRegion {
+  return polysToRegion(
+    rects.map(([x0, z0, x1, z1]) => rectToPoly([x0 - pad, z0 - pad, x1 + pad, z1 + pad])),
+  );
 }
 
-export function unionPaths(paths: Paths64): Paths64 {
-  if (paths.length === 0) return new Paths64();
-  return Clipper.Union(paths, undefined, FillRule.NonZero);
+export function unionRegions(regions: ReadonlyArray<PlanRegion>): PlanRegion {
+  const nonEmpty = regions.filter((r) => r.length > 0);
+  if (nonEmpty.length === 0) return [];
+  if (nonEmpty.length === 1) return nonEmpty[0];
+  return polygonClipping.union(nonEmpty[0], ...nonEmpty.slice(1));
 }
 
-export function diffPaths(subject: Paths64, clip: Paths64): Paths64 {
-  if (subject.length === 0) return new Paths64();
+export function diffRegions(subject: PlanRegion, clip: PlanRegion): PlanRegion {
+  if (subject.length === 0) return [];
   if (clip.length === 0) return subject;
-  return Clipper.Difference(subject, clip, FillRule.NonZero);
+  return polygonClipping.difference(subject, clip);
 }
 
-export function intersectPaths(subject: Paths64, clip: Paths64): Paths64 {
-  if (subject.length === 0 || clip.length === 0) return new Paths64();
-  return Clipper.Intersect(subject, clip, FillRule.NonZero);
+export function intersectRegions(subject: PlanRegion, clip: PlanRegion): PlanRegion {
+  if (subject.length === 0 || clip.length === 0) return [];
+  return polygonClipping.intersection(subject, clip);
 }
 
-export function inflatePaths(
-  paths: Paths64,
-  deltaInches: number,
-  join: 'miter' | 'round' | 'square' = 'round',
-): Paths64 {
-  if (paths.length === 0) return new Paths64();
-  const jt = join === 'miter' ? JoinType.Miter : join === 'square' ? JoinType.Square : JoinType.Round;
-  return Clipper.InflatePaths(paths, deltaInches * SCALE, jt, EndType.Polygon, 3.0);
-}
-
-export function inflatePolyline(
+export function polylineToRegion(
   pts: ReadonlyArray<Vec2>,
   halfWidthInches: number,
-  end: 'butt' | 'square' | 'round' = 'square',
-): Paths64 {
-  const p = new Paths64();
-  p.push(toPath64(pts));
-  const et = end === 'butt' ? EndType.Butt : end === 'round' ? EndType.Round : EndType.Square;
-  return Clipper.InflatePaths(p, halfWidthInches * SCALE, JoinType.Miter, et, 2.5);
+  endCap: 'butt' | 'square' = 'square',
+): PlanRegion {
+  const ext = endCap === 'square' ? halfWidthInches : 0;
+  const boxes: Vec2[][] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x0, z0] = pts[i];
+    const [x1, z1] = pts[i + 1];
+    const dx = x1 - x0;
+    const dz = z1 - z0;
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-6) continue;
+    const ux = dx / len;
+    const uz = dz / len;
+    const nx = -uz * halfWidthInches;
+    const nz = ux * halfWidthInches;
+    const sx = x0 - ux * ext;
+    const sz = z0 - uz * ext;
+    const ex = x1 + ux * ext;
+    const ez = z1 + uz * ext;
+    boxes.push([
+      [sx + nx, sz + nz],
+      [ex + nx, ez + nz],
+      [ex - nx, ez - nz],
+      [sx - nx, sz - nz],
+    ]);
+  }
+  return polysToRegion(boxes);
 }
 
-export function areaOfPaths(paths: Paths64): number {
-  return Math.abs(Clipper.areaPaths(paths)) / (SCALE * SCALE);
-}
-
-export function areaOfPath(path: Path64): number {
-  return Math.abs(Clipper.area(path)) / (SCALE * SCALE);
-}
-
-export function pathsToPolygonsWithHoles(paths: Paths64): PolygonWithHoles[] {
-  if (paths.length === 0) return [];
-  const cleaned = Clipper.Union(paths, undefined, FillRule.NonZero);
-  if (cleaned.length === 0) return [];
-
-  const shells = cleaned
-    .filter((p) => p.length >= 3 && Clipper.area(p) > 0)
-    .map((p) => ({
-      path: p,
-      area: Clipper.area(p),
-      outer: fromPath64(p),
-      holes: [] as Vec2[][],
-    }));
-
-  const holes = cleaned.filter((p) => p.length >= 3 && Clipper.area(p) < 0);
-  for (const h of holes) {
-    const sample = new Point64(h[0].x, h[0].y);
-    let owner: (typeof shells)[number] | null = null;
-    for (const s of shells) {
-      if (Clipper.pointInPolygon(sample, s.path) !== PointInPolygonResult.IsOutside) {
-        if (!owner || s.area < owner.area) {
-          owner = s;
-        }
-      }
-    }
-    if (owner) {
-      owner.holes.push(fromPath64(h));
+export function regionArea(region: PlanRegion): number {
+  let total = 0;
+  for (const poly of region) {
+    if (poly.length === 0) continue;
+    total += Math.abs(signedPolyArea(cleanRing(poly[0])));
+    for (let i = 1; i < poly.length; i++) {
+      total -= Math.abs(signedPolyArea(cleanRing(poly[i])));
     }
   }
+  return Math.max(0, total);
+}
 
-  return shells.map(({ outer, holes: shHoles }) => ({ outer, holes: shHoles }));
+export function regionToPolygonsWithHoles(region: PlanRegion): PolygonWithHoles[] {
+  const out: PolygonWithHoles[] = [];
+  for (const poly of region) {
+    if (poly.length === 0) continue;
+    const outer = cleanRing(poly[0]);
+    if (outer.length < 3) continue;
+    const holes = poly
+      .slice(1)
+      .map((h) => cleanRing(h))
+      .filter((h) => h.length >= 3);
+    out.push({ outer, holes });
+  }
+  return out;
+}
+
+export function pointInRing([px, pz]: Vec2, ring: ReadonlyArray<Vec2>): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, zi] = ring[i];
+    const [xj, zj] = ring[j];
+    const intersects = zi > pz !== zj > pz && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+export function distPointToRing([px, pz]: Vec2, ring: ReadonlyArray<Vec2>): number {
+  if (pointInRing([px, pz], ring)) return 0;
+  let best = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const [x1, z1] = ring[i];
+    const [x2, z2] = ring[(i + 1) % ring.length];
+    const dx = x2 - x1;
+    const dz = z2 - z1;
+    const denom = dx * dx + dz * dz;
+    const t = denom > 1e-9 ? Math.max(0, Math.min(1, ((px - x1) * dx + (pz - z1) * dz) / denom)) : 0;
+    const d = Math.hypot(px - x1 - t * dx, pz - z1 - t * dz);
+    if (d < best) best = d;
+  }
+  return best;
 }
 
 /**

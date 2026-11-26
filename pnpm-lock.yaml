@@ -17,12 +17,12 @@ importers:
       '@react-three/postprocessing':
         specifier: 3.0.4
         version: 3.0.4(@react-three/fiber@9.4.2(@types/react@19.2.7)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(three@0.181.2))(@types/three@0.181.0)(react@19.2.0)(three@0.181.2)
-      clipper2-js:
-        specifier: 1.2.4
-        version: 1.2.4(@angular/common@15.2.10(@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3))(rxjs@7.8.2))(@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3))
       n8ao:
         specifier: 1.10.1
         version: 1.10.1(postprocessing@6.38.2(three@0.181.2))(three@0.181.2)
+      polygon-clipping:
+        specifier: 0.15.7
+        version: 0.15.7
       postprocessing:
         specifier: 6.38.2
         version: 6.38.2(three@0.181.2)
@@ -77,20 +77,6 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
-
-  '@angular/common@15.2.10':
-    resolution: {integrity: sha512-jdBn3fctkqoNrJn9VLsUHpcCEhCxWSczdsR+BBbD6T0oLl6vMrAVNjPwfBejnlgfWN1KoRU9kgOYsMxa5apIWQ==}
-    engines: {node: ^14.20.0 || ^16.13.0 || >=18.10.0}
-    peerDependencies:
-      '@angular/core': 15.2.10
-      rxjs: ^6.5.3 || ^7.4.0
-
-  '@angular/core@15.2.10':
-    resolution: {integrity: sha512-meGGidnitQJGDxYd9/LrqYiVlId+vGaLoiLgJdKBz+o2ZO6OmXQGuNw2VBqf17/Cc0/UjzrOY7+kILNFKkk/WQ==}
-    engines: {node: ^14.20.0 || ^16.13.0 || >=18.10.0}
-    peerDependencies:
-      rxjs: ^6.5.3 || ^7.4.0
-      zone.js: ~0.11.4 || ~0.12.0 || ~0.13.0
 
   '@asamuzakjp/css-color@4.1.2':
     resolution: {integrity: sha512-NfBUvBaYgKIuq6E/RBLY1m0IohzNHAYyaJGuTK79Z23uNwmz2jl1mPsC5ZxCCxylinKhT1Amn5oNTlx1wN8cQg==}
@@ -776,12 +762,6 @@ packages:
     resolution: {integrity: sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==}
     engines: {node: '>=18'}
 
-  clipper2-js@1.2.4:
-    resolution: {integrity: sha512-xD6ETXBuFYRI0IDWfSbkmMYB+M+nPoZQVVLi1GGlVhUVKV8rC//YYP6YHJX0ciyPsWYUCMxcv1QaIGLfnQo18Q==}
-    peerDependencies:
-      '@angular/common': ^15.1.0
-      '@angular/core': ^15.1.0
-
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
@@ -1041,6 +1021,9 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
+  polygon-clipping@0.15.7:
+    resolution: {integrity: sha512-nhfdr83ECBg6xtqOAJab1tbksbBAOMUltN60bU+llHVOL0e5Onm1WpAXXWXVB39L8AJFssoIhEVuy/S90MmotA==}
+
   postcss@8.5.33:
     resolution: {integrity: sha512-RVHEU9/Pp1Fnjr/MpAJsZoADukCKhfIi15OunEYiGktIkYLkPVvC1sioWolGDS7XByMTx9m/IGbro0Js13zhnQ==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1103,13 +1086,13 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  robust-predicates@3.0.3:
+    resolution: {integrity: sha512-NS3levdsRIUOmiJ8FZWCP7LG3QpJyrs/TE0Zpf1yvZu8cAJJ6QMW92H1c7kWpdIHo8RvmLxN/o2JXTKHp74lUA==}
+
   rollup@4.68.8:
     resolution: {integrity: sha512-IHx4DeeTGhoAPke6p1Wlg0JEQFyQoZQQjEe1iD+nhEERk7eoeHK9zyOpVJiGc54Z1MCgI96rN1tD7Ttub8XyPA==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
-
-  rxjs@7.8.2:
-    resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
 
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
@@ -1142,6 +1125,10 @@ packages:
   source-map-js@1.2.4:
     resolution: {integrity: sha512-J7ZjMvHd9O1fcT/5V09QWaaSl2BbWx3F6O08spde82Namf9UB0GxRVIPiNbVsdKkoizHiSpTodo3vp2bAy91MA==}
     engines: {node: '>=6.0.0'}
+
+  splaytree@3.2.4:
+    resolution: {integrity: sha512-8Fy9uIWy1HeLj+z3P9miHqxFjKGP5UFWgoaS9SsXv3Eto6MQWU7iReJX4asWCITAUMe0RQMh9irmksob+nTskw==}
+    engines: {node: '>=18.20 || >=20'}
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
@@ -1224,9 +1211,6 @@ packages:
 
   troika-worker-utils@0.52.0:
     resolution: {integrity: sha512-W1CpvTHykaPH5brv5VHLfQo9D1OYuo0cSBEUQFFT/nBUzM8iD6Lq2/tgG/f1OelbAS1WtaTPQzE5uM49egnngw==}
-
-  tslib@2.9.1:
-    resolution: {integrity: sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA==}
 
   tunnel-rat@0.1.2:
     resolution: {integrity: sha512-lR5VHmkPhzdhrM092lI2nACsLO4QubF0/yoOhzX7c+wIpbN1GjHNzCc91QlpxBi+cnx8vVJ+Ur6vL5cEoQPFpQ==}
@@ -1388,9 +1372,6 @@ packages:
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
-  zone.js@0.13.3:
-    resolution: {integrity: sha512-MKPbmZie6fASC/ps4dkmIhaT5eonHkEt6eAy80K42tAm0G2W+AahLJjbfi6X9NPdciOE9GRFTTM8u2IiF6O3ww==}
-
   zustand@4.5.7:
     resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
     engines: {node: '>=12.7.0'}
@@ -1429,18 +1410,6 @@ snapshots:
   '@acemir/cssom@0.9.33': {}
 
   '@adobe/css-tools@4.5.0': {}
-
-  '@angular/common@15.2.10(@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3))(rxjs@7.8.2)':
-    dependencies:
-      '@angular/core': 15.2.10(rxjs@7.8.2)(zone.js@0.13.3)
-      rxjs: 7.8.2
-      tslib: 2.9.1
-
-  '@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3)':
-    dependencies:
-      rxjs: 7.8.2
-      tslib: 2.9.1
-      zone.js: 0.13.3
 
   '@asamuzakjp/css-color@4.1.2':
     dependencies:
@@ -2057,12 +2026,6 @@ snapshots:
 
   chai@6.3.0: {}
 
-  clipper2-js@1.2.4(@angular/common@15.2.10(@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3))(rxjs@7.8.2))(@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3)):
-    dependencies:
-      '@angular/common': 15.2.10(@angular/core@15.2.10(rxjs@7.8.2)(zone.js@0.13.3))(rxjs@7.8.2)
-      '@angular/core': 15.2.10(rxjs@7.8.2)(zone.js@0.13.3)
-      tslib: 2.9.1
-
   convert-source-map@2.0.0: {}
 
   cross-env@7.0.3:
@@ -2309,6 +2272,11 @@ snapshots:
 
   picomatch@4.0.7: {}
 
+  polygon-clipping@0.15.7:
+    dependencies:
+      robust-predicates: 3.0.3
+      splaytree: 3.2.4
+
   postcss@8.5.33:
     dependencies:
       nanoid: 3.3.20
@@ -2363,6 +2331,8 @@ snapshots:
 
   require-from-string@2.0.2: {}
 
+  robust-predicates@3.0.3: {}
+
   rollup@4.68.8:
     dependencies:
       '@types/estree': 1.0.11
@@ -2395,10 +2365,6 @@ snapshots:
       '@rollup/rollup-win32-x64-msvc': 4.68.8
       fsevents: 2.3.3
 
-  rxjs@7.8.2:
-    dependencies:
-      tslib: 2.9.1
-
   safer-buffer@2.1.2: {}
 
   saxes@6.0.0:
@@ -2420,6 +2386,8 @@ snapshots:
   siginfo@2.0.0: {}
 
   source-map-js@1.2.4: {}
+
+  splaytree@3.2.4: {}
 
   stackback@0.0.2: {}
 
@@ -2496,8 +2464,6 @@ snapshots:
       three: 0.181.2
 
   troika-worker-utils@0.52.0: {}
-
-  tslib@2.9.1: {}
 
   tunnel-rat@0.1.2(@types/react@19.2.7)(react@19.2.0):
     dependencies:
@@ -2608,10 +2574,6 @@ snapshots:
   xmlchars@2.2.0: {}
 
   yallist@3.1.1: {}
-
-  zone.js@0.13.3:
-    dependencies:
-      tslib: 2.9.1
 
   zustand@4.5.7(@types/react@19.2.7)(react@19.2.0):
     dependencies:

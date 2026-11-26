@@ -62,6 +62,11 @@ export interface LayoutIdea {
   readonly items: PlacementTuple[];
 }
 
+export interface LayoutExceptionRule {
+  readonly requiredPieces: ReadonlyArray<PlacementTuple>;
+  readonly allowedProblem: string;
+}
+
 export interface ApartmentSpec {
   readonly id: string;
   readonly title: string;
@@ -84,12 +89,13 @@ export interface ApartmentSpec {
   readonly wetDoors: ReadonlyArray<string>;
   readonly bathTile: readonly [string, string, string, string];
   readonly example: ReadonlyArray<PlacementTuple>;
-  readonly guestMoves: Record<string, ReadonlyArray< readonly [number, number, number] >>;
+  readonly guestMoves: Record<string, ReadonlyArray<readonly [number, number, number]>>;
   readonly ideas: ReadonlyArray<{
     readonly name: string;
     readonly note: string;
     readonly moves: Record<string, ReadonlyArray<readonly [number, number, number]>>;
   }>;
+  readonly allowedLayoutExceptions?: ReadonlyArray<LayoutExceptionRule>;
 }
 
 export interface SolvedWindow {
@@ -193,8 +199,6 @@ export interface FurnitureSpec {
   readonly flat?: boolean;
   readonly seat?: boolean;
   readonly tuck?: boolean;
-  readonly stack?: ReadonlyArray<string>;
-  readonly deck?: number;
   readonly alt?: string;
   readonly altVerb?: string;
   readonly anchor?: 'back' | 'center';
@@ -219,11 +223,10 @@ export interface PlacedItem {
 
 export interface EvaluatedItem extends PlacedItem {
   readonly y: number;
-  readonly on: number | null;
   readonly bad: boolean;
   readonly warn: boolean;
-  readonly msgs: ItemMessage[];
-  readonly hits: Vec2[][];
+  readonly msgs: ReadonlyArray<ItemMessage>;
+  readonly hits: ReadonlyArray<ReadonlyArray<Vec2>>;
 }
 
 export interface ClearanceEntry {

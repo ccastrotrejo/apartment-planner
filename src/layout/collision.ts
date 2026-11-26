@@ -2,7 +2,6 @@ import { FURNITURE_CATALOG } from '../furniture/catalog';
 import {
   convexPolysOverlap,
   minPolygonGap,
-  pointInConvexPoly,
   polyAABB,
   rectToPoly,
   transformHitCorners,
@@ -16,6 +15,7 @@ import type {
   ItemMessage,
   PlacedItem,
   SolvedPlan,
+  Vec2,
 } from '../types';
 import { fmtInch, niceName } from '../utils/units';
 
@@ -42,80 +42,69 @@ export interface LayoutStatusSummary {
   readonly statusText: string;
 }
 
+interface WorkingEvaluation {
+  readonly item: PlacedItem;
+  readonly y: number;
+  readonly hits: Vec2[][];
+  bad: boolean;
+  warn: boolean;
+  readonly msgs: ItemMessage[];
+}
+
 export function evaluateLayout(plan: SolvedPlan, rawItems: ReadonlyArray<PlacedItem>): LayoutStatusSummary {
-  const evaluated: EvaluatedItem[] = rawItems
+  const working: WorkingEvaluation[] = rawItems
     .filter((it) => Boolean(FURNITURE_CATALOG[it.k]))
-    .map((it) => {
-      const spec = FURNITURE_CATALOG[it.k];
-      const hits = shapeRectsForSpec(spec).map((r) => transformHitCorners(it.x, it.z, it.r, r));
+    .map((item) => {
+      const spec = FURNITURE_CATALOG[item.k];
       return {
-        ...it,
+        item,
         y: spec.flat ? 0.04 : 0,
-        on: null,
+        hits: shapeRectsForSpec(spec).map((r) => transformHitCorners(item.x, item.z, item.r, r)),
         bad: false,
         warn: false,
         msgs: [],
-        hits,
       };
     });
 
-  // Resolve stackable items if any
-  for (let i = 0; i < evaluated.length; i++) {
-    const it = evaluated[i];
-    const spec = FURNITURE_CATALOG[it.k];
-    if (!spec.stack?.length) continue;
-    const hit0 = it.hits[0];
-    const cx = hit0.reduce((acc, p) => acc + p[0], 0) / hit0.length;
-    const cz = hit0.reduce((acc, p) => acc + p[1], 0) / hit0.length;
-    const sup = evaluated.find(
-      (o) => o.id !== it.id && spec.stack!.includes(o.k) && pointInConvexPoly([cx, cz], o.hits[0]),
-    );
-    if (sup) {
-      const supSpec = FURNITURE_CATALOG[sup.k];
-      (it as { on: number | null; y: number }).on = sup.id;
-      (it as { y: number }).y = supSpec.deck ?? supSpec.size[2];
-    }
-  }
-
-  const pushMsg = (it: { msgs: ItemMessage[] }, text: string, level: 'bad' | 'warn') => {
-    if (!it.msgs.some((m) => m.text === text)) {
-      it.msgs.push({ text, level });
+  const pushMsg = (w: WorkingEvaluation, text: string, level: 'bad' | 'warn') => {
+    if (!w.msgs.some((m) => m.text === text)) {
+      w.msgs.push({ text, level });
     }
   };
 
   // Obstacles & door swings
-  for (const it of evaluated) {
-    const spec = FURNITURE_CATALOG[it.k];
+  for (const w of working) {
+    const spec = FURNITURE_CATALOG[w.item.k];
     for (const obs of plan.obstacles) {
       const targetRect = spec.seat && obs.low ? obs.low : obs.r;
       const obsPoly = rectToPoly(targetRect);
-      if (it.hits.some((h) => convexPolysOverlap(h, obsPoly, 0.4))) {
+      if (w.hits.some((h) => convexPolysOverlap(h, obsPoly, 0.4))) {
         const msg =
           obs.kind === 'fixture'
             ? `Overlaps the ${niceName(obs.name ?? 'fixture')}`
             : OBSTACLE_LABELS[obs.kind];
-        pushMsg(it, msg, 'bad');
-        (it as { bad: boolean }).bad = true;
+        pushMsg(w, msg, 'bad');
+        w.bad = true;
       }
     }
-    if (!spec.flat && it.on === null) {
+    if (!spec.flat) {
       for (const door of plan.doors) {
-        if (it.hits.some((h) => convexPolysOverlap(h, door.poly, 0.4))) {
-          pushMsg(it, `In the swing of the ${niceName(door.name)} door`, 'warn');
-          (it as { warn: boolean }).warn = true;
+        if (w.hits.some((h) => convexPolysOverlap(h, door.poly, 0.4))) {
+          pushMsg(w, `In the swing of the ${niceName(door.name)} door`, 'warn');
+          w.warn = true;
         }
       }
     }
   }
 
   // Piece-to-piece overlaps
-  for (let i = 0; i < evaluated.length; i++) {
-    for (let j = i + 1; j < evaluated.length; j++) {
-      const a = evaluated[i];
-      const b = evaluated[j];
-      const da = FURNITURE_CATALOG[a.k];
-      const db = FURNITURE_CATALOG[b.k];
-      if (da.flat || db.flat || a.on !== null || b.on !== null) continue;
+  for (let i = 0; i < working.length; i++) {
+    for (let j = i + 1; j < working.length; j++) {
+      const a = working[i];
+      const b = working[j];
+      const da = FURNITURE_CATALOG[a.item.k];
+      const db = FURNITURE_CATALOG[b.item.k];
+      if (da.flat || db.flat) continue;
       if ((da.seat && db.tuck) || (db.seat && da.tuck)) continue;
       const aTop = a.y + da.size[2];
       const bTop = b.y + db.size[2];
@@ -126,33 +115,41 @@ export function evaluateLayout(plan: SolvedPlan, rawItems: ReadonlyArray<PlacedI
       if (a.hits.some((p) => b.hits.some((q) => convexPolysOverlap(p, q, 0.4)))) {
         pushMsg(a, `Overlaps the ${db.name.toLowerCase()}`, 'bad');
         pushMsg(b, `Overlaps the ${da.name.toLowerCase()}`, 'bad');
-        (a as { bad: boolean }).bad = true;
-        (b as { bad: boolean }).bad = true;
+        a.bad = true;
+        b.bad = true;
       }
     }
   }
 
   // Wall-hung bike to queen bed clearance warning (< 24")
   let clearanceWarning: string | null = null;
-  const bikes = evaluated.filter((it) => it.k === 'bike-black');
-  const beds = evaluated.filter((it) => it.k === 'queen-bed');
+  const bikes = working.filter((w) => w.item.k === 'bike-black');
+  const beds = working.filter((w) => w.item.k === 'queen-bed');
   for (const bike of bikes) {
     for (const bed of beds) {
       const gap = minPolygonGap(bike.hits[0], bed.hits[0]);
       if (gap === null || gap >= 24) continue;
       const message = `Only ${fmtInch(gap)} between the bike and bed`;
       pushMsg(bike, message, 'warn');
-      (bike as { warn: boolean }).warn = true;
+      bike.warn = true;
       clearanceWarning = message;
     }
   }
 
   let badCount = 0;
   let warnCount = 0;
-  for (const it of evaluated) {
-    if (it.bad) badCount++;
-    else if (it.warn) warnCount++;
-  }
+  const evaluated: EvaluatedItem[] = working.map((w) => {
+    if (w.bad) badCount++;
+    else if (w.warn) warnCount++;
+    return {
+      ...w.item,
+      y: w.y,
+      bad: w.bad,
+      warn: w.warn,
+      msgs: w.msgs,
+      hits: w.hits,
+    };
+  });
 
   const statusKind: 'ok' | 'warn' | 'bad' = badCount > 0 ? 'bad' : warnCount > 0 ? 'warn' : 'ok';
   const statusText =

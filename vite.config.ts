@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  // Relative base so the build works from https://ccastrotrejo.github.io/apartment-planner/.
+  base: './',
   plugins: [react()],
   server: {
     host: '127.0.0.1',

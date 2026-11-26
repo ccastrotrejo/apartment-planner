@@ -59,6 +59,10 @@ export interface ApartmentGeometrySet {
   readonly doorLeavesFull: THREE.BufferGeometry;
   readonly doorLeavesLow: THREE.BufferGeometry;
   readonly doorHardware: THREE.BufferGeometry;
+  readonly closetWood: THREE.BufferGeometry;
+  readonly closetFabric: THREE.BufferGeometry;
+  readonly closetDark: THREE.BufferGeometry;
+  readonly closetMetal: THREE.BufferGeometry;
   readonly wallTileLow: THREE.BufferGeometry;
   readonly wallTileUpper: THREE.BufferGeometry;
   readonly windows: BuiltWindowGeometry;
@@ -284,7 +288,7 @@ function buildCabinets(
     b.fixtureDark.push(localCylY(cu, cv, h - 8.38, h - 8.18, 1.65, 1.65, 24));
     b.fixtureMetal.push(localCylY(cu, cv, h - 8.4, h - 8.12, 1.85, 1.95, 24));
 
-    // Pull-down architectural gooseneck faucet + spray head + single-lever mixer
+    // Pull-down architectural gooseneck faucet + spray head + single-lever mixer + built-in soap pump
     const fv = Math.min(sv1 + 2.1, D - 1.3);
     const arc: Array<[number, number, number]> = [
       [cu, fv, h - 0.05],
@@ -298,8 +302,53 @@ function buildCabinets(
     b.fixtureMetal.push(localCylY(cu, fv, h - 0.05, h + 1.4, 0.98, 0.82, 24));
     b.fixtureDark.push(localCylY(cu, fv - 7.0 + 0.12, h + 9.4, h + 10.6, 0.56, 0.46, 20));
     b.fixtureMetal.push(localTube([[cu + 0.8, fv, h + 2.4], [cu + 2.9, fv - 0.3, h + 4.4]], 0.2, 12));
+
+    // Built-in deck soap dispenser + stainless bottom sink grid
+    b.fixtureMetal.push(localCylY(su1 - 2.2, fv, h - 0.05, h + 2.4, 0.55, 0.42, 18));
+    b.fixtureMetal.push(localTube([[su1 - 2.2, fv, h + 2.2], [su1 - 2.2, fv - 1.7, h + 2.0]], 0.14, 10));
+    for (let gu = su0 + 2.2; gu <= su1 - 2.2; gu += 2.6) {
+      b.fixtureMetal.push(localBox(gu - 0.06, sv0 + 1.2, h - 8.2, gu + 0.06, sv1 - 1.2, h - 8.08));
+    }
+
+    // End-grain butcher-block cutting board + chef's knife on prep zone toward range (u < su0)
+    if (su0 > 18) {
+      b.cabWood.push(localBox(4.5, 3.2, h, 18.5, 14.8, h + 1.05, 0.28));
+      b.fixtureMetal.push(localBox(8.2, 6.2, h + 1.05, 15.2, 7.35, h + 1.14, 0.03));
+      b.fixtureDark.push(localBox(5.2, 6.45, h + 1.05, 8.3, 7.15, h + 1.45, 0.15));
+    }
+
+    // Brushed-stainless espresso bar + porcelain cup + ceramic artisan fruit bowl on north counter end (u > su1)
+    if (W - su1 > 22) {
+      const eu = W - 9.5;
+      b.appliance.push(localBox(eu - 4.4, D - 13.5, h, eu + 4.4, D - 2.5, h + 11.4, 0.45));
+      b.fixtureDark.push(localBox(eu - 4.2, D - 15.2, h, eu + 4.2, D - 13.2, h + 1.1, 0.2));
+      b.fixtureMetal.push(localBox(eu - 4.0, D - 15.0, h + 1.08, eu + 4.0, D - 13.3, h + 1.2, 0.05));
+      b.fixtureDark.push(localCylY(eu, D - 13.9, h + 6.8, h + 8.4, 1.35, 1.45, 20));
+      b.fixtureMetal.push(localTube([[eu, D - 13.9, h + 7.1], [eu - 2.4, D - 17.2, h + 6.9]], 0.24, 12));
+      b.fixtureMetal.push(localTube([[eu + 3.1, D - 13.2, h + 8.2], [eu + 3.6, D - 15.0, h + 4.2]], 0.14, 10));
+      b.ceramic.push(localCylY(eu, D - 14.1, h + 1.2, h + 3.2, 1.05, 1.35, 20));
+
+      const bowlPts = [
+        new THREE.Vector2(0.01, h),
+        new THREE.Vector2(2.4, h),
+        new THREE.Vector2(4.4, h + 1.6),
+        new THREE.Vector2(4.8, h + 3.1),
+        new THREE.Vector2(4.45, h + 3.2),
+        new THREE.Vector2(2.2, h + 0.45),
+        new THREE.Vector2(0.01, h + 0.45),
+      ];
+      const bowl = new THREE.LatheGeometry(bowlPts, 28);
+      bowl.translate(su1 + 9.5, 0, -(D * 0.44));
+      b.ceramic.push(bowl);
+    }
   } else {
     b.countertop.push(localBox(0, -0.65, h - 1.25, W, D, h, 0.1));
+  }
+
+  // Backsplash GFCI duplex outlets (42.5" height)
+  for (let ou = 9.0; ou < W - 6.0; ou += 32.0) {
+    b.upper_cabWhite.push(localBox(ou - 1.4, D - 0.52, 40.8, ou + 1.4, D - 0.34, 45.2, 0.08));
+    b.upper_fixtureDark.push(localBox(ou - 0.65, D - 0.56, 41.6, ou + 0.65, D - 0.48, 44.4, 0.04));
   }
 
   b.upper_backsplash.push(localBox(0, D - 0.38, h, W, D, UPPER_Y0));
@@ -484,11 +533,20 @@ function buildVanity(b: Buckets, W: number, D: number, h: number): void {
   b.ceramic.push(localBox(cu - sw / 2 - 0.65, cv - sd / 2 - 0.65, h - 6.6, cu + sw / 2 + 0.65, cv + sd / 2 + 0.65, h - 6.15, 0.2));
   b.fixtureMetal.push(localCylY(cu, cv, h - 6.16, h - 5.98, 1.0, 1.0, 20));
 
-  // Single-hole chrome basin faucet
+  // Single-hole chrome basin faucet + ceramic soap dispenser & tumbler + side towel bar
   const fv = cv + sd / 2 + 1.85;
   b.fixtureMetal.push(localCylY(cu, fv, h - 0.05, h + 4.8, 0.48, 0.44, 20));
   b.fixtureMetal.push(localTube([[cu, fv, h + 4.2], [cu, fv - 3.6, h + 4.6]], 0.3, 14));
   b.fixtureMetal.push(localTube([[cu, fv, h + 4.8], [cu, fv - 1.6, h + 5.2]], 0.16, 12));
+
+  // Vanity countertop accessories (apothecary soap bottle + ceramic tumbler)
+  b.fixtureDark.push(localCylY(W - 3.4, D - 4.2, h, h + 4.6, 1.15, 1.05, 18));
+  b.fixtureMetal.push(localCylY(W - 3.4, D - 4.2, h + 4.6, h + 5.6, 0.28, 0.24, 14));
+  b.ceramic.push(localCylY(2.9, D - 4.4, h, h + 3.8, 1.05, 1.18, 18));
+
+  // Chrome hand-towel bar + folded waffle-weave towel on side of vanity
+  b.fixtureMetal.push(localTube([[W + 0.1, 3.0, h - 4.5], [W + 1.6, 3.0, h - 4.5], [W + 1.6, D - 3.5, h - 4.5], [W + 0.1, D - 3.5, h - 4.5]], 0.2, 10));
+  b.cabWhite.push(localBox(W + 1.15, 4.4, h - 14.5, W + 2.05, D - 4.9, h - 4.15, 0.35));
 
   // Frameless recessed medicine mirror cabinet + dual globe vanity light bar
   b.upper_fixtureDark.push(localBox(0.7, D - 1.25, h + 8.1, W - 0.7, D, 71.9, 0.12));
@@ -541,9 +599,14 @@ function buildToilet(b: Buckets, bowl: Rect4, tank: Rect4): void {
   const tankLid = localBox(tu0, tv0, 27.95, tu1, tv1, 29.1, 0.45);
   b.ceramic.push(skirt, lid, bridge, tankBody, tankLid);
 
-  // Dual-flush top chrome button + side lever accent
+  // Dual-flush top chrome button + side lever + wall-mounted toilet-paper holder & roll
   b.fixtureMetal.push(localCylY((tu0 + tu1) / 2, (tv0 + tv1) / 2, 29.05, 29.22, 1.05, 1.05, 22));
   b.fixtureMetal.push(localBox(tu0 + 0.45, tv0 - 0.42, 26.2, tu0 + 2.2, tv0 + 0.4, 26.68, 0.12));
+  b.fixtureMetal.push(localTube([[u1 + 3.2, tv1, 24.5], [u1 + 3.2, tv1 - 3.6, 24.5], [u1 + 7.4, tv1 - 3.6, 24.5]], 0.18, 10));
+  const roll = new THREE.CylinderGeometry(2.1, 2.1, 4.2, 22);
+  roll.rotateZ(Math.PI / 2);
+  roll.translate(u1 + 5.4, 24.5, -(tv1 - 3.6));
+  b.cabWhite.push(roll);
 }
 
 function buildTub(b: Buckets, W: number, D: number, h: number): void {
@@ -586,6 +649,18 @@ function buildTub(b: Buckets, W: number, D: number, h: number): void {
   b.showerGlass.push(localBox(0.35, 1.2, h, 24.5, 1.62, 76.0, 0.08));
   b.upper_fixtureMetal.push(localBox(0.0, 0.85, h + 6.0, 1.1, 1.95, h + 8.2, 0.12));
   b.upper_fixtureMetal.push(localBox(0.0, 0.85, 68.0, 1.1, 1.95, 70.2, 0.12));
+
+  // Shampoo & conditioner apothecary bottles on the corner tub deck + plush bath mat outside tub
+  for (const [bu, bh, dark] of [
+    [2.1, 6.2, true],
+    [4.6, 5.8, true],
+    [7.0, 4.8, false],
+  ] as const) {
+    const target = dark ? b.fixtureDark : b.ceramic;
+    target.push(localCylY(bu, D - 2.1, h, h + bh, 1.02, 0.95, 16));
+    b.fixtureMetal.push(localCylY(bu, D - 2.1, h + bh, h + bh + 0.9, 0.24, 0.2, 12));
+  }
+  b.cabWhite.push(localBox(W * 0.34, -18.5, 0.02, W * 0.82, -2.5, 0.32, 0.15));
 }
 
 function buildLaundry(b: Buckets, W: number, D: number, h: number): void {
@@ -1045,6 +1120,66 @@ export function buildApartmentGeometrySet(plan: SolvedPlan): ApartmentGeometrySe
     }
   }
 
+  // Built-in closet shelves, chrome hanging rods, and hung garments (shown with solid full walls)
+  const cWood: THREE.BufferGeometry[] = [];
+  const cFabric: THREE.BufferGeometry[] = [];
+  const cDark: THREE.BufferGeometry[] = [];
+  const cMetal: THREE.BufferGeometry[] = [];
+  const addClosetInterior = (cx0: number, cz0: number, cx1: number, cz1: number) => {
+    const midX = (cx0 + cx1) / 2;
+    const shelf = new RoundedBoxGeometry(cx1 - cx0 - 0.6, 0.75, cz1 - cz0 - 0.6, 2, 0.1);
+    shelf.translate(midX, 67.2, (cz0 + cz1) / 2);
+    cWood.push(shelf);
+
+    const rod = new THREE.CylinderGeometry(0.45, 0.45, cz1 - cz0 - 1.2, 16);
+    rod.rotateX(Math.PI / 2);
+    rod.translate(midX, 64.2, (cz0 + cz1) / 2);
+    cMetal.push(rod);
+
+    let idx = 0;
+    for (let gz = cz0 + 5.0; gz <= cz1 - 5.0; gz += 4.2) {
+      const gw = 15.5 + (idx % 3) * 1.4;
+      const gh = idx % 3 === 0 ? 34.0 : 25.0;
+      const garment = new RoundedBoxGeometry(gw, gh, 2.6, 2, 0.85);
+      garment.translate(midX, 61.8 - gh / 2, gz);
+      if (idx % 3 === 0) cDark.push(garment);
+      else if (idx % 3 === 1) cFabric.push(garment);
+      else cWood.push(garment);
+
+      const hook = new THREE.CylinderGeometry(0.1, 0.1, 2.8, 8);
+      hook.translate(midX, 63.0, gz);
+      cMetal.push(hook);
+      idx++;
+    }
+    const stackBox = new RoundedBoxGeometry(11.5, 4.8, 12.5, 2, 0.7);
+    stackBox.translate(midX, 70.0, cz0 + (cz1 - cz0) * 0.32);
+    cFabric.push(stackBox);
+  };
+  addClosetInterior(X.bcl_W_in, Y.bed_S_out, X.bcl_E_in, Y.alc_S);
+  addClosetInterior(X.core_W_in, Y.cl_N, X.cl_E_in, Y.S_in);
+  const closetWood = applyArchitecturalBoxUVs(mergeBufferGeometries(cWood), TEX_INCHES.laminate);
+  const closetFabric = mergeBufferGeometries(cFabric);
+  const closetDark = mergeBufferGeometries(cDark);
+  const closetMetal = mergeBufferGeometries(cMetal);
+
+  // Subtle Decora wall switches & outlets rendered on solid walls only
+  const addWallPlate = (wx: number, wy: number, wz: number, alongZ: boolean) => {
+    const g = new THREE.BoxGeometry(alongZ ? 0.22 : 2.9, 4.6, alongZ ? 2.9 : 0.22);
+    g.translate(wx, wy, wz);
+    return g;
+  };
+  const wallPlates = mergeBufferGeometries([
+    addWallPlate(X.entry_L - 5.5, 44, Y.S_in - 0.12, false),
+    addWallPlate(X.part_W - 0.12, 44, Y.door_top - 6.0, true),
+    addWallPlate(X.core_W - 0.12, 44, Y.bath_door_top - 5.0, true),
+    addWallPlate(X.W_in + 0.12, 14, 72, true),
+    addWallPlate(X.W_in + 0.12, 14, 155, true),
+    addWallPlate(X.part_W - 0.12, 14, 96, true),
+    addWallPlate(X.bed_E - 0.12, 14, 28, true),
+    addWallPlate(X.bed_E - 0.12, 14, 98, true),
+  ]);
+  const closetFabricWithPlates = mergeBufferGeometries([closetFabric, wallPlates]);
+
   const uvSizeByBucket: Partial<Record<FixtureBucketKey, readonly [number, number]>> = {
     cabWood: TEX_INCHES.laminate,
     upper_cabWood: TEX_INCHES.laminate,
@@ -1077,6 +1212,10 @@ export function buildApartmentGeometrySet(plan: SolvedPlan): ApartmentGeometrySe
     doorLeavesFull: doorsInfo.leavesFull,
     doorLeavesLow: doorsInfo.leavesLow,
     doorHardware: doorsInfo.hardware,
+    closetWood,
+    closetFabric: closetFabricWithPlates,
+    closetDark,
+    closetMetal,
     wallTileLow,
     wallTileUpper,
     windows: {

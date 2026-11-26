@@ -2,8 +2,12 @@ import * as THREE from 'three';
 
 export interface TextureBundle {
   readonly map?: THREE.CanvasTexture;
+  readonly normalMap?: THREE.CanvasTexture;
   readonly bumpMap?: THREE.CanvasTexture;
   readonly roughnessMap?: THREE.CanvasTexture;
+  readonly alphaMap?: THREE.CanvasTexture;
+  readonly emissiveMap?: THREE.CanvasTexture;
+  readonly normalScale?: number;
   readonly bumpScale?: number;
 }
 
@@ -32,14 +36,62 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
   return [c, ctx];
 }
 
-function wrapTex(c: HTMLCanvasElement, colorSpace: THREE.ColorSpace): THREE.CanvasTexture {
+function wrapTex(
+  c: HTMLCanvasElement,
+  colorSpace: THREE.ColorSpace,
+  clamp = false,
+): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.RepeatWrapping;
-  t.wrapT = THREE.RepeatWrapping;
+  t.wrapS = clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+  t.wrapT = clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
   t.colorSpace = colorSpace;
   t.anisotropy = 8;
   t.needsUpdate = true;
   return t;
+}
+
+/** Convert a seamless grayscale heightfield canvas into a tangent-space RGB normal map via 3x3 Sobel filter. */
+function heightToNormalTex(heightCanvas: HTMLCanvasElement, strength = 2.2): THREE.CanvasTexture | undefined {
+  const w = heightCanvas.width;
+  const h = heightCanvas.height;
+  const hCtx = heightCanvas.getContext('2d');
+  if (!hCtx) return undefined;
+  const [nc, nCtx] = makeCanvas(w, h);
+  if (!nCtx) return undefined;
+
+  const src = hCtx.getImageData(0, 0, w, h).data;
+  const outImg = nCtx.createImageData(w, h);
+  const dst = outImg.data;
+  const sample = (x: number, y: number): number => {
+    const wx = ((x % w) + w) % w;
+    const wy = ((y % h) + h) % h;
+    return src[(wy * w + wx) * 4] / 255;
+  };
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const tl = sample(x - 1, y - 1);
+      const t = sample(x, y - 1);
+      const tr = sample(x + 1, y - 1);
+      const l = sample(x - 1, y);
+      const r = sample(x + 1, y);
+      const bl = sample(x - 1, y + 1);
+      const b = sample(x, y + 1);
+      const br = sample(x + 1, y + 1);
+
+      const dx = (tr + 2 * r + br - (tl + 2 * l + bl)) * strength;
+      const dy = (bl + 2 * b + br - (tl + 2 * t + tr)) * strength;
+      const invLen = 1 / Math.hypot(dx, dy, 1);
+
+      const idx = (y * w + x) * 4;
+      dst[idx] = Math.round((-dx * invLen * 0.5 + 0.5) * 255);
+      dst[idx + 1] = Math.round((-dy * invLen * 0.5 + 0.5) * 255);
+      dst[idx + 2] = Math.round((invLen * 0.5 + 0.5) * 255);
+      dst[idx + 3] = 255;
+    }
+  }
+  nCtx.putImageData(outImg, 0, 0);
+  return wrapTex(nc, THREE.NoColorSpace);
 }
 
 function addNoise(ctx: CanvasRenderingContext2D, w: number, h: number, r: Rng, amp: number): void {
@@ -74,21 +126,29 @@ export type TextureKey =
   | 'fabric'
   | 'rug'
   | 'cane'
+  | 'pellicle'
+  | 'leaf'
+  | 'tvArt'
+  | 'ideScreen'
   | 'plaster';
 
 export const TEX_INCHES: Record<TextureKey, readonly [number, number]> = {
   planks: [52.5, 105],
   tile: [48, 48],
   walltile: [48, 48],
-  backsplash: [36, 36],
+  backsplash: [30, 30],
   quartz: [64, 64],
   laminate: [26, 52],
-  walnut: [28, 42],
+  walnut: [24, 38],
   stainless: [24, 24],
-  fabric: [14, 14],
-  rug: [18, 18],
-  cane: [6, 6],
-  plaster: [42, 42],
+  fabric: [10, 10],
+  rug: [14, 14],
+  cane: [4.5, 4.5],
+  pellicle: [3.5, 3.5],
+  leaf: [10, 10],
+  tvArt: [1, 1],
+  ideScreen: [1, 1],
+  plaster: [36, 36],
 };
 
 const CACHE = new Map<TextureKey, TextureBundle>();
@@ -259,12 +319,12 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
         rCtx.fillStyle = 'rgb(225,225,225)';
         rCtx.fillRect(c * cw, 0, 2.5, H);
       }
-      addNoise(cCtx, W, H, r, 5);
+      addNoise(cCtx, W, H, r, 6);
       bundle = {
         map: wrapTex(cc, THREE.SRGBColorSpace),
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
+        normalMap: heightToNormalTex(bc, 2.6),
         roughnessMap: wrapTex(rc, THREE.NoColorSpace),
-        bumpScale: 0.14,
+        normalScale: 0.65,
       };
     }
   } else if (key === 'tile' || key === 'walltile' || key === 'backsplash') {
@@ -335,9 +395,9 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
       addNoise(cCtx, W, H, r, isFloor ? 6 : 3);
       bundle = {
         map: wrapTex(cc, THREE.SRGBColorSpace),
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
+        normalMap: heightToNormalTex(bc, 2.4),
         roughnessMap: wrapTex(rc, THREE.NoColorSpace),
-        bumpScale: 0.12,
+        normalScale: 0.55,
       };
     }
   } else if (key === 'quartz') {
@@ -412,8 +472,8 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
       addNoise(cCtx, W, H, r, 5);
       bundle = {
         map: wrapTex(cc, THREE.SRGBColorSpace),
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
-        bumpScale: 0.08,
+        normalMap: heightToNormalTex(bc, 1.9),
+        normalScale: 0.42,
       };
     }
   } else if (key === 'stainless') {
@@ -443,39 +503,74 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
         rCtx.stroke();
       }
       bundle = {
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
+        normalMap: heightToNormalTex(bc, 1.4),
         roughnessMap: wrapTex(rc, THREE.NoColorSpace),
-        bumpScale: 0.025,
+        normalScale: 0.24,
       };
     }
-  } else if (key === 'fabric' || key === 'rug') {
+  } else if (key === 'fabric') {
     const W = 256;
     const H = 256;
     const [cc, cCtx] = makeCanvas(W, H);
     const [bc, bCtx] = makeCanvas(W, H);
     if (cCtx && bCtx) {
-      const isRug = key === 'rug';
-      cCtx.fillStyle = 'rgb(245,245,244)';
+      cCtx.fillStyle = 'rgb(244,243,240)';
       cCtx.fillRect(0, 0, W, H);
-      bCtx.fillStyle = 'rgb(128,128,128)';
+      bCtx.fillStyle = 'rgb(120,120,120)';
       bCtx.fillRect(0, 0, W, H);
 
-      const step = isRug ? 4 : 3;
+      const step = 4;
       for (let y = 0; y < H; y += step) {
         for (let x = 0; x < W; x += step) {
           const warp = ((x / step + y / step) % 2) === 0;
-          const v = 236 + Math.round((r() - 0.5) * (isRug ? 22 : 14));
-          cCtx.fillStyle = `rgb(${v},${v},${v})`;
+          const slub = Math.sin(x * 0.13) * Math.cos(y * 0.17) * 8;
+          const v = Math.round(236 + slub + (r() - 0.5) * 14);
+          cCtx.fillStyle = `rgb(${v},${v},${v - 2})`;
           cCtx.fillRect(x, y, step, step);
-          const bv = (warp ? 156 : 104) + Math.round((r() - 0.5) * 26);
+
+          const bv = Math.round((warp ? 174 : 92) + slub * 1.5 + (r() - 0.5) * 24);
           bCtx.fillStyle = `rgb(${bv},${bv},${bv})`;
           bCtx.fillRect(x, y, step - (warp ? 0 : 1), step - (warp ? 1 : 0));
         }
       }
       bundle = {
         map: wrapTex(cc, THREE.SRGBColorSpace),
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
-        bumpScale: isRug ? 0.18 : 0.08,
+        normalMap: heightToNormalTex(bc, 2.2),
+        normalScale: 0.48,
+      };
+    }
+  } else if (key === 'rug') {
+    const W = 256;
+    const H = 256;
+    const [cc, cCtx] = makeCanvas(W, H);
+    const [bc, bCtx] = makeCanvas(W, H);
+    if (cCtx && bCtx) {
+      cCtx.fillStyle = 'rgb(236,233,227)';
+      cCtx.fillRect(0, 0, W, H);
+      bCtx.fillStyle = 'rgb(100,100,100)';
+      bCtx.fillRect(0, 0, W, H);
+
+      const rowH = 6;
+      const knotW = 5;
+      for (let y = 0; y < H; y += rowH) {
+        const rowTone = (y / rowH) % 2 === 0 ? 6 : -6;
+        for (let x = 0; x < W; x += knotW) {
+          const fleck = r() < 0.14 ? -22 : 0;
+          const v = Math.max(175, Math.min(252, Math.round(234 + rowTone + fleck + (r() - 0.5) * 14)));
+          cCtx.fillStyle = `rgb(${v},${v - 2},${v - 5})`;
+          cCtx.fillRect(x, y, knotW - 0.6, rowH - 0.8);
+
+          const bh = Math.round(168 + rowTone * 2 + (r() - 0.5) * 32);
+          bCtx.fillStyle = `rgb(${bh},${bh},${bh})`;
+          bCtx.beginPath();
+          bCtx.ellipse(x + knotW / 2, y + rowH / 2, knotW * 0.46, rowH * 0.42, 0, 0, Math.PI * 2);
+          bCtx.fill();
+        }
+      }
+      bundle = {
+        map: wrapTex(cc, THREE.SRGBColorSpace),
+        normalMap: heightToNormalTex(bc, 2.8),
+        normalScale: 0.72,
       };
     }
   } else if (key === 'cane') {
@@ -484,22 +579,21 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
     const [cc, cCtx] = makeCanvas(W, H);
     const [bc, bCtx] = makeCanvas(W, H);
     if (cCtx && bCtx) {
-      // Dark shadow holes behind hexagonal rattan cane webbing
-      cCtx.fillStyle = 'rgb(96,74,52)';
+      cCtx.fillStyle = 'rgb(64,46,32)';
       cCtx.fillRect(0, 0, W, H);
-      bCtx.fillStyle = 'rgb(36,36,36)';
+      bCtx.fillStyle = 'rgb(22,22,22)';
       bCtx.fillRect(0, 0, W, H);
 
       const step = 32;
       const drawStrand = (x0: number, y0: number, x1: number, y1: number, w: number, bright: number) => {
-        cCtx.strokeStyle = `rgb(${Math.round(235 * bright)},${Math.round(218 * bright)},${Math.round(184 * bright)})`;
+        cCtx.strokeStyle = `rgb(${Math.round(238 * bright)},${Math.round(218 * bright)},${Math.round(182 * bright)})`;
         cCtx.lineWidth = w;
         cCtx.beginPath();
         cCtx.moveTo(x0, y0);
         cCtx.lineTo(x1, y1);
         cCtx.stroke();
 
-        bCtx.strokeStyle = `rgb(${Math.round(210 * bright)},${Math.round(210 * bright)},${Math.round(210 * bright)})`;
+        bCtx.strokeStyle = `rgb(${Math.round(220 * bright)},${Math.round(220 * bright)},${Math.round(220 * bright)})`;
         bCtx.lineWidth = w;
         bCtx.beginPath();
         bCtx.moveTo(x0, y0);
@@ -508,21 +602,200 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
       };
 
       for (let i = -W; i < W * 2; i += step) {
-        drawStrand(i, 0, i + H, H, 5.5, 0.94);
-        drawStrand(i, H, i + H, 0, 5.5, 0.96);
+        drawStrand(i, 0, i + H, H, 5.2, 0.92);
+        drawStrand(i, H, i + H, 0, 5.2, 0.95);
       }
       for (let y = step / 2; y < H; y += step) {
-        drawStrand(0, y, W, y, 6.2, 1.0);
+        drawStrand(0, y, W, y, 6.0, 1.0);
       }
       for (let x = step / 2; x < W; x += step) {
-        drawStrand(x, 0, x, H, 6.2, 0.98);
+        drawStrand(x, 0, x, H, 6.0, 0.97);
       }
       addNoise(cCtx, W, H, r, 6);
       bundle = {
         map: wrapTex(cc, THREE.SRGBColorSpace),
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
-        bumpScale: 0.22,
+        normalMap: heightToNormalTex(bc, 3.0),
+        normalScale: 0.78,
       };
+    }
+  } else if (key === 'pellicle') {
+    const W = 128;
+    const H = 128;
+    const [ac, aCtx] = makeCanvas(W, H);
+    const [bc, bCtx] = makeCanvas(W, H);
+    if (aCtx && bCtx) {
+      aCtx.fillStyle = 'rgb(140,140,140)';
+      aCtx.fillRect(0, 0, W, H);
+      bCtx.fillStyle = 'rgb(60,60,60)';
+      bCtx.fillRect(0, 0, W, H);
+
+      const step = 8;
+      for (let y = 0; y < H; y += step) {
+        aCtx.fillStyle = 'rgb(245,245,245)';
+        aCtx.fillRect(0, y, W, 3.2);
+        bCtx.fillStyle = 'rgb(210,210,210)';
+        bCtx.fillRect(0, y, W, 3.2);
+      }
+      for (let x = 0; x < W; x += step) {
+        aCtx.fillStyle = 'rgb(235,235,235)';
+        aCtx.fillRect(x, 0, 2.8, H);
+        bCtx.fillStyle = 'rgb(195,195,195)';
+        bCtx.fillRect(x, 0, 2.8, H);
+      }
+      bundle = {
+        alphaMap: wrapTex(ac, THREE.NoColorSpace),
+        normalMap: heightToNormalTex(bc, 2.4),
+        normalScale: 0.55,
+      };
+    }
+  } else if (key === 'leaf') {
+    const W = 256;
+    const H = 256;
+    const [cc, cCtx] = makeCanvas(W, H);
+    const [bc, bCtx] = makeCanvas(W, H);
+    if (cCtx && bCtx) {
+      cCtx.fillStyle = 'rgb(228,236,222)';
+      cCtx.fillRect(0, 0, W, H);
+      bCtx.fillStyle = 'rgb(128,128,128)';
+      bCtx.fillRect(0, 0, W, H);
+
+      for (let y = 0; y < H; y += 22) {
+        cCtx.strokeStyle = 'rgba(248,255,240,0.28)';
+        cCtx.lineWidth = 1.6;
+        bCtx.strokeStyle = 'rgb(185,185,185)';
+        bCtx.lineWidth = 2.2;
+        cCtx.beginPath();
+        bCtx.beginPath();
+        cCtx.moveTo(0, y);
+        cCtx.quadraticCurveTo(W * 0.5, y - 10, W, y);
+        bCtx.moveTo(0, y);
+        bCtx.quadraticCurveTo(W * 0.5, y - 10, W, y);
+        cCtx.stroke();
+        bCtx.stroke();
+      }
+      addNoise(cCtx, W, H, r, 6);
+      bundle = {
+        map: wrapTex(cc, THREE.SRGBColorSpace),
+        normalMap: heightToNormalTex(bc, 1.8),
+        normalScale: 0.35,
+      };
+    }
+  } else if (key === 'tvArt') {
+    const W = 1024;
+    const H = 576;
+    const [cc, cCtx] = makeCanvas(W, H);
+    if (cCtx) {
+      cCtx.fillStyle = '#ede8de';
+      cCtx.fillRect(0, 0, W, H);
+      const mx = 68;
+      const my = 52;
+      const aw = W - 2 * mx;
+      const ah = H - 2 * my;
+      cCtx.fillStyle = '#cfc8ba';
+      cCtx.fillRect(mx - 3, my - 3, aw + 6, ah + 6);
+
+      cCtx.save();
+      cCtx.beginPath();
+      cCtx.rect(mx, my, aw, ah);
+      cCtx.clip();
+
+      const sky = cCtx.createLinearGradient(0, my, 0, my + ah);
+      sky.addColorStop(0, '#e3d9c8');
+      sky.addColorStop(0.58, '#d8c5ae');
+      sky.addColorStop(1, '#c6b199');
+      cCtx.fillStyle = sky;
+      cCtx.fillRect(mx, my, aw, ah);
+
+      cCtx.fillStyle = '#f2e5cf';
+      cCtx.beginPath();
+      cCtx.arc(mx + aw * 0.68, my + ah * 0.36, ah * 0.17, 0, Math.PI * 2);
+      cCtx.fill();
+
+      cCtx.fillStyle = '#7e8c7d';
+      cCtx.beginPath();
+      cCtx.moveTo(mx, my + ah * 0.66);
+      cCtx.bezierCurveTo(mx + aw * 0.32, my + ah * 0.5, mx + aw * 0.62, my + ah * 0.72, mx + aw, my + ah * 0.58);
+      cCtx.lineTo(mx + aw, my + ah);
+      cCtx.lineTo(mx, my + ah);
+      cCtx.closePath();
+      cCtx.fill();
+
+      cCtx.fillStyle = '#b46d49';
+      cCtx.beginPath();
+      cCtx.moveTo(mx, my + ah * 0.78);
+      cCtx.bezierCurveTo(mx + aw * 0.28, my + ah * 0.68, mx + aw * 0.58, my + ah * 0.84, mx + aw, my + ah * 0.72);
+      cCtx.lineTo(mx + aw, my + ah);
+      cCtx.lineTo(mx, my + ah);
+      cCtx.closePath();
+      cCtx.fill();
+
+      cCtx.fillStyle = '#36413c';
+      cCtx.fillRect(mx + aw * 0.14, my + ah * 0.44, aw * 0.12, ah * 0.38);
+      cCtx.restore();
+
+      addNoise(cCtx, W, H, r, 5);
+      const tex = wrapTex(cc, THREE.SRGBColorSpace, true);
+      bundle = { map: tex, emissiveMap: tex };
+    }
+  } else if (key === 'ideScreen') {
+    const W = 512;
+    const H = 288;
+    const [cc, cCtx] = makeCanvas(W, H);
+    if (cCtx) {
+      cCtx.fillStyle = '#13171d';
+      cCtx.fillRect(0, 0, W, H);
+      cCtx.fillStyle = '#1b2129';
+      cCtx.fillRect(0, 0, W, 18);
+      for (const [dx, col] of [
+        [12, '#e06c75'],
+        [24, '#e5c07b'],
+        [36, '#98c379'],
+      ] as const) {
+        cCtx.fillStyle = col;
+        cCtx.beginPath();
+        cCtx.arc(dx, 9, 3.2, 0, Math.PI * 2);
+        cCtx.fill();
+      }
+      cCtx.fillStyle = '#171c23';
+      cCtx.fillRect(0, 18, 92, H - 18);
+      for (let y = 30; y < H - 20; y += 13) {
+        if (y === 69) {
+          cCtx.fillStyle = '#263342';
+          cCtx.fillRect(4, y - 4, 84, 10);
+        }
+        cCtx.fillStyle = y === 69 ? '#7fd1e6' : '#5e6b78';
+        cCtx.fillRect(12 + (y % 3) * 6, y, 36 + ((y * 7) % 30), 3.5);
+      }
+      const colors = ['#61afef', '#c678dd', '#98c379', '#e5c07b', '#abb2bf', '#56b6c2'];
+      for (let row = 0; row < 17; row++) {
+        const y = 30 + row * 13;
+        const indent = [0, 14, 28, 28, 14, 0, 14, 28][row % 8];
+        let x = 108 + indent;
+        const segs = 2 + (row % 3);
+        for (let s = 0; s < segs; s++) {
+          const w = 18 + ((row * 17 + s * 29) % 48);
+          if (x + w > 316) break;
+          cCtx.fillStyle = colors[(row + s) % colors.length];
+          cCtx.fillRect(x, y, w, 4);
+          x += w + 7;
+        }
+      }
+      cCtx.fillStyle = '#1d242d';
+      cCtx.fillRect(328, 28, 172, H - 42);
+      cCtx.fillStyle = '#d7cfc2';
+      cCtx.beginPath();
+      cCtx.moveTo(414, 72);
+      cCtx.lineTo(476, 104);
+      cCtx.lineTo(414, 142);
+      cCtx.lineTo(352, 108);
+      cCtx.closePath();
+      cCtx.fill();
+      cCtx.strokeStyle = '#4fb4c9';
+      cCtx.lineWidth = 2;
+      cCtx.stroke();
+
+      const tex = wrapTex(cc, THREE.SRGBColorSpace, true);
+      bundle = { map: tex, emissiveMap: tex };
     }
   } else if (key === 'plaster') {
     const W = 256;
@@ -531,10 +804,10 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
     if (bCtx) {
       bCtx.fillStyle = 'rgb(128,128,128)';
       bCtx.fillRect(0, 0, W, H);
-      addNoise(bCtx, W, H, r, 16);
+      addNoise(bCtx, W, H, r, 14);
       bundle = {
-        bumpMap: wrapTex(bc, THREE.NoColorSpace),
-        bumpScale: 0.02,
+        normalMap: heightToNormalTex(bc, 0.8),
+        normalScale: 0.14,
       };
     }
   }

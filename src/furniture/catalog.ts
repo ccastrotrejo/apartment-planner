@@ -15,6 +15,8 @@ export const FURNITURE_CATALOG: Record<string, FurnitureSpec> = {
     colors: {
       upholstery: '#ece6da',
       pillow: '#c7cec2',
+      accent: '#b96d49',
+      throw: '#d8d0c3',
       legs: '#65442b',
     },
     note: 'Cream button-tufted bouclé sectional: left chaise, right track arm with piped bolster, accent pillow, and tapered walnut legs.',

@@ -134,14 +134,26 @@ function EnvironmentAndLighting({
         shadow-camera-near={60}
         shadow-camera-far={1050}
       />
-      {/* Cool north-west window sky fill for natural architectural contrast */}
+      {/* Cool north-west window sky fill + warm interior kitchen/bath practical lights */}
       {view === '3d' && (
-        <directionalLight
-          position={[cx - 240, 140, cz - 310]}
-          target={sunTarget}
-          intensity={0.42}
-          color={0xdceeff}
-        />
+        <>
+          <directionalLight
+            position={[cx - 240, 140, cz - 310]}
+            target={sunTarget}
+            intensity={0.46}
+            color={0xd8ecff}
+          />
+          {/* Kitchen under-cabinet LED task pools */}
+          <pointLight position={[48, 51, 224]} color={0xffe2b4} intensity={160} distance={78} decay={2} />
+          <pointLight position={[48, 51, 304]} color={0xffe2b4} intensity={140} distance={74} decay={2} />
+          {/* Bathroom vanity sconce pool */}
+          <pointLight position={[184, 73, 286]} color={0xffebd0} intensity={150} distance={68} decay={2} />
+          {/* Subtle architectural drop-shadow receiver beneath slab plinth */}
+          <mesh position={[cx, -3.22, cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[900, 900]} />
+            <shadowMaterial transparent opacity={darkTheme ? 0.26 : 0.13} />
+          </mesh>
+        </>
       )}
     </>
   );
@@ -311,6 +323,14 @@ const ApartmentArchitecture = React.memo(function ApartmentArchitecture({
             castShadow
           />
           <mesh geometry={geoSet.doorHardware} material={mats.fixtureMetal} castShadow />
+          {fullWalls && (
+            <>
+              <mesh geometry={geoSet.closetWood} material={mats.cabWood} receiveShadow castShadow />
+              <mesh geometry={geoSet.closetFabric} material={mats.cabWhite} receiveShadow castShadow />
+              <mesh geometry={geoSet.closetDark} material={mats.fixtureDark} receiveShadow castShadow />
+              <mesh geometry={geoSet.closetMetal} material={mats.fixtureMetal} castShadow />
+            </>
+          )}
         </>
       )}
 
@@ -436,6 +456,14 @@ const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
             <meshBasicMaterial map={shadowTex} transparent depthWrite={false} opacity={0.78} />
           </mesh>
         ))}
+
+      {/* Practical warm 2700K light pool emitted by floor lamps (moves live when dragged!) */}
+      {view === '3d' && item.k === 'torchiere-lamp' && (
+        <pointLight position={[0, 66, 0]} color={0xffe3b8} intensity={210} distance={115} decay={2} />
+      )}
+      {view === '3d' && item.k === 'tripod-lamp' && (
+        <pointLight position={[0, 54, 0]} color={0xffdfad} intensity={190} distance={105} decay={2} />
+      )}
 
       {parts.map((p, idx) => {
         const planEdges = view === 'plan' ? getPartPlanEdges(p) : null;

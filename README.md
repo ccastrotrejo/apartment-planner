@@ -1,92 +1,55 @@
-# Apartment furniture planner
+# Apartment 3D Showcase & Furniture Planner
 
-A drag-and-drop furniture planner for one apartment, in a plan view and a 3D view, built from the
-brochure plan (and, where you have them, tape measurements). Everything is generated from Python: the floor
-plan, every piece of furniture, and the page itself (`web/index.html`, one self-contained file). The same
-geometry also comes out as 3D-printable STLs at 1:60.
+An interactive 3D apartment showcase and drag-and-drop floor-plan planner built with **TypeScript**, **React**, **Vite**, and **Three.js** (`@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing` with `N8AO` ambient occlusion).
 
-This repo is Residence A4 at Loden, Brooklyn (1 bed / 1 bath, 546 SF) and its furniture as an example. Fork it
-and swap in your own place. The furniture was read off a walkthrough video of the owner's current apartment,
-so its sizes are estimates until measured.
+Residence A4 at Loden, Brooklyn (1 bed / 1 bath, 546 SF) is included as a complete reference model—derived from brochure room measurements and walkthrough finishes—with typed specs so additional apartments can be added cleanly.
 
 ![The planner in 3D with see-through walls](docs/screenshot.png)
 
-## Try it
+## Quick start
 
-Open `web/index.html` in a browser (three.js and the fonts load from CDNs; the rest is inside the file).
-To share it, turn on GitHub Pages for your fork (Settings → Pages → deploy from the `main` branch, root
-folder) and open `https://<you>.github.io/<repo>/web/`.
+```bash
+pnpm install
+pnpm run dev      # http://127.0.0.1:8765/
+```
 
-- Drag furniture in from the list; drag to move, R / Shift+R to rotate, F (or double-click) to switch
-  two-state pieces (the lift-top coffee table), Delete to remove,
-  Ctrl/Cmd+Z to undo.
-- For keyboard selection, focus the plan and press Enter to cycle through furniture. When unlocked, use the
-  arrow keys to move the selected piece (hold Shift for larger steps).
-- **Lock** freezes the furniture so dragging only moves the camera. **See-through** makes the walls
-  translucent. **4′ walls / Full** switches the apartment cut. **Standard / With guest** switches between
-  the two layouts built into the page.
-- Red = overlapping a wall or another piece; amber = blocking a door swing. Selecting a piece shows its
-  clearance to the nearest wall or piece in each direction.
-- **Layouts** opens circulation-checked layout ideas (desk at the corner window, open lounge, guest ready),
-  saves layouts in your browser, and shares them as a text "layout code" anyone can paste in.
-  (The page was built as a Claude artifact, where it can also share saved layouts between visitors through a
-  database. On GitHub Pages or from a file, those features stay off and everything else works.)
-- The furniture sidebar collapses to a slim rail on desktop and opens as a drawer on narrow screens. Every
-  piece has a 3D thumbnail. The black bike hangs opposite the head of the bed, leaving about 9 inches at its
-  foot. The TV mounts on the living-room partition. The printable bike and rolling TV stand remain separate
-  floor models.
-- The web model includes detailed cabinets, appliances, bath fixtures, wall and floor finishes, soft shadows,
-  PBR material responses, crisp plan outlines, and a 65-inch TV matched to the walkthrough.
+### Scripts
 
-## Make it your own
+- `pnpm run dev` — Start the Vite development server with instant HMR
+- `pnpm run build` — Type-check (`tsc -b`) and build the production bundle to `dist/`
+- `pnpm test` — Run the Vitest circulation, geometry, and layout test suite
+- `pnpm run typecheck` — Run strict TypeScript validation
 
-Install the dependencies once: `python3 -m pip install -r requirements.txt`.
+## Features
 
-1. **Floor plan: `floorplan.py`.** All units are real inches; x runs east, y runs south.
-   - Every wall face is a named line. Its position comes from a dimension (`MEAS`: "from line a to
-     line b is N inches", here the room sizes printed on the brochure) or, for unmeasured lines, from pixel
-     positions on an image of the plan (`PX_X` / `PX_Y`), scaled by the px-per-inch the dimensions calibrate.
-     `solve()` places them, interpolating unmeasured lines between the nearest measured ones.
-   - `WALLS`, `WINDOWS`, `DOORS` (hinged, with swing), `SLIDERS`, `FIXTURES` (kitchen, baths) and `ROOMS`
-     are lists of rectangles between those lines.
-   - For a new place, the simplest start is to replace those lines and lists with your own: measure the
-     rooms, name the wall faces, and list them. The pixel photo is optional; with enough measurements you
-     can place every line from `MEAS` alone.
-   - Check it with `python3 build.py`: it writes a dimensioned plan (`output/plan-dimensions.png`), 3D
-     previews and the printable STLs to `output/`.
-2. **Furniture: `furniture.py`.** `FURNITURE` holds each piece's real dimensions in inches; a builder
-   function turns them into a solid (boxes, cylinders and hulls with manifold3d), registered in `BUILDERS`.
-   Pieces built with `parts=True` return colored parts for the website. Add new pieces to `WEB_ONLY` if you
-   don't want to print them.
-3. **Website list: `web/export_web.py`.** `PIECES` gives each piece its name, group and color(s);
-   `EXAMPLE` is the starting layout (plan inches; rotation 0 = front faces south). Collisions use each
-   piece's footprint rectangle; `FOOTPRINTS` in `furniture.py` overrides it (one rectangle per leg for the
-   L-shaped sectional, just the pot for plants). `IDEAS` lists alternative arrangements, each given as the
-   pieces it moves away from `EXAMPLE`; they appear under **Layout ideas** in the Layouts sheet. During
-   export, `web/layout_check.py` rejects a built-in layout that blocks a door swing, a fixture approach, a
-   30 inch circulation route, or 24 inch access beside the bed and in front of storage. The requested bike
-   placement is an exception to the bed-access check and is flagged in the planner.
-4. **Rebuild the page:** `python3 web/export_web.py --reset-layouts` the first time (it replaces the
-   built-in Standard layout with your `EXAMPLE` and With guest with `EXAMPLE` adjusted by `GUEST`), then
-   plain `python3 web/export_web.py` after each change. It rewrites the data block inside `web/index.html`;
-   open or refresh the page to see it.
-5. **Printing (optional):** `python3 furniture.py` writes each piece and packed print plates to
-   `output/furniture/` (1:60 by default; legs and thin parts are thickened so they print).
-6. **Tests:** `python3 -m unittest discover -s tests -v` checks the published layouts' circulation and
-   verifies that web-only furniture variants do not change printable geometry.
+- **Realistic 3D architecture & PBR materials:** Procedural albedo, bump, and roughness textures for European white-oak planks, concrete-look porcelain floor and wall tiles with recessed matte grout, veined Calacatta quartz countertops, rift-oak cabinetry, brushed stainless appliances, woven bouclé/linen upholstery, flatweave wool rugs, rattan cane webbing, clearcoat glazed porcelain, honed stone window sills, black aluminum mullions, door casings/headers, and `N8AO` ambient occlusion.
+- **Interactive layout planning:**
+  - Drag pieces in from the sidebar (each with an offscreen-rendered 3D thumbnail); drag on the floor to move, `R` / `Shift+R` to rotate, `F` or double-click to lift/lower two-state pieces (lift-top coffee table), `Delete` to remove, and `Cmd/Ctrl+Z` to undo.
+  - Focus the stage and press `Enter` to cycle furniture selection, or use arrow keys (`Shift` for 6″ steps) when unlocked.
+  - **Plan / 3D** toggles between a crisp orthographic architectural plan and the 3D view.
+  - **4′ walls / Full** switches between a 4-foot cutaway and full 7′6″ walls (with upper cabinetry, lighting, mirror cabinet, shower glass, and doorway headers).
+  - **See-through** ghosts exterior and interior walls so every room remains visible from any angle.
+  - **Lock** freezes furniture so dragging orbits/pans freely without accidental edits.
+- **Real-time clearance & circulation checks:** Red highlights wall/piece overlaps; amber warns on door swings and tight clearances. Built-in layouts are verified by `WalkCheck` for 30″ walking paths and 24″ furniture access.
+- **Layouts & sharing:** Switch between **Standard**, **With guest**, and curated **Layout ideas**, save custom layouts in `localStorage`, or share portable `A4:...` text codes.
 
-## Files
+## Project structure
 
-| File | What it does |
+| Path | Purpose |
 |---|---|
-| `floorplan.py` | The plan: measurements, named lines, walls, windows, doors, fixtures, rooms |
-| `build.py` | Turns the plan into the 3D apartment, the dimensioned 2D plan, previews and STLs |
-| `furniture.py` | Furniture dimensions and builders; print plates |
-| `web/export_web.py` | Builds the scene (apartment + furniture meshes, obstacles, doors) and embeds it in the page |
-| `web/layout_check.py` | Validates built-in layouts for walking routes, door swings and furniture access |
-| `tests/test_web_layouts.py` | Regression tests for circulation rules and web-only furniture variants |
-| `web/index.html` | The planner (three.js r147 from jsDelivr); the scene data sits between the `scene:` markers |
+| `src/apartments/lodenA4.ts` | Typed apartment measurements, brochure coordinate solver, walls, openings, fixtures, and preset layouts |
+| `src/furniture/catalog.ts` | Furniture dimensions, collision footprints, two-state variants, and PBR color/material palettes |
+| `src/geometry/plan2d.ts` | 2D `clipper2-js` polygon booleans, offsets, SAT overlap math, and outward-normal 3D plan extrusions |
+| `src/layout/walkCheck.ts` | 30″ circulation path and 24″ furniture-access validator |
+| `src/layout/collision.ts` | Real-time overlap, door-swing, and N/E/S/W clearance engine |
+| `src/scene/textures.ts` | Procedural canvas PBR textures (albedo, bump, and roughness maps) |
+| `src/scene/materials.ts` | `MeshPhysicalMaterial` / `MeshStandardMaterial` presets for architecture and furniture |
+| `src/scene/apartmentGeometries.ts` | 3D apartment shell, doors/casings/headers, windows, and multi-material kitchen/bath/laundry built-ins |
+| `src/scene/furnitureGeometries.ts` | Sculpted Three.js builders for all 20 furniture pieces, contact shadows, and 3D library thumbnails |
+| `src/scene/ApartmentScene.tsx` | On-demand R3F renderer, static shadow caching, `N8AO` post-processing, and zero-re-render ref overlays |
+| `src/__tests__/planner.test.ts` | Vitest regression tests for floor-plan dimensions, circulation rules, and 3D mesh integrity |
 
 ## License
 
-MIT (see `LICENSE`): use, change and share it freely; keep the copyright notice.
+MIT — see `LICENSE`.
+

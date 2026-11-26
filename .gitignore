@@ -1,2 +1,6 @@
-__pycache__/
+node_modules/
+dist/
+*.tsbuildinfo
+.venv/
 output/
+__pycache__/

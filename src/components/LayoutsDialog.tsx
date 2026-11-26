@@ -39,6 +39,9 @@ export function LayoutsDialog({
   const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const copiedTimerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(copiedTimerRef.current), []);
 
   useEffect(() => {
     if (open) {
@@ -95,7 +98,8 @@ export function LayoutsDialog({
         () => {
           setCopiedConfirm(true);
           setCodeMessage('Copied layout code. Paste it anywhere to share.');
-          setTimeout(() => setCopiedConfirm(false), 1600);
+          window.clearTimeout(copiedTimerRef.current);
+          copiedTimerRef.current = window.setTimeout(() => setCopiedConfirm(false), 1600);
         },
         () => {
           setCodeInput(code);

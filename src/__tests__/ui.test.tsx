@@ -50,3 +50,37 @@ describe('Planner UI interactions', () => {
     expect(screen.getByText(/Saved “Weekend hosting”/i)).toBeTruthy();
   });
 });
+
+describe('Planner persistence and dialog accessibility', () => {
+  it('keeps an intentionally empty working layout across reloads', () => {
+    localStorage.clear();
+    localStorage.setItem('a4-planner-work-v1', '[]');
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Standard' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryAllByText(/^×\d+$/)).toHaveLength(0);
+  });
+
+  it('falls back to the Standard layout when stored data is corrupt', () => {
+    localStorage.clear();
+    localStorage.setItem('a4-planner-work-v1', '{"not":"a layout"}');
+    localStorage.setItem('a4-planner-saved-v1', '"garbage"');
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Standard' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('makes the app inert while Layouts is open and returns focus to its trigger on close', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    render(<App />);
+    const trigger = screen.getByRole('button', { name: 'Layouts' });
+    await user.click(trigger);
+
+    expect(trigger.closest('[inert]')).not.toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Layouts' }).closest('[inert]')).toBeNull();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Layouts' })).toBeNull();
+    expect(trigger.closest('[inert]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+});

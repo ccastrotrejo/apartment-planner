@@ -660,18 +660,17 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
       bCtx.fillRect(0, 0, W, H);
 
       for (let y = 0; y < H; y += 22) {
-        cCtx.strokeStyle = 'rgba(248,255,240,0.28)';
-        cCtx.lineWidth = 1.6;
-        bCtx.strokeStyle = 'rgb(185,185,185)';
-        bCtx.lineWidth = 2.2;
-        cCtx.beginPath();
-        bCtx.beginPath();
-        cCtx.moveTo(0, y);
-        cCtx.quadraticCurveTo(W * 0.5, y - 10, W, y);
-        bCtx.moveTo(0, y);
-        bCtx.quadraticCurveTo(W * 0.5, y - 10, W, y);
-        cCtx.stroke();
-        bCtx.stroke();
+        for (const [ctx, style, width] of [
+          [cCtx, 'rgba(248,255,240,0.28)', 1.6],
+          [bCtx, 'rgb(185,185,185)', 2.2],
+        ] as const) {
+          ctx.strokeStyle = style;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.quadraticCurveTo(W * 0.5, y - 10, W, y);
+          ctx.stroke();
+        }
       }
       addNoise(cCtx, W, H, r, 6);
       bundle = {

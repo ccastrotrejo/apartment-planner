@@ -452,3 +452,11 @@ export function buildApartmentGeometrySet(plan: SolvedPlan): ApartmentGeometrySe
     fixtures,
   };
 }
+
+/** Releases every GPU buffer owned by a geometry set built by `buildApartmentGeometrySet`. */
+export function disposeApartmentGeometrySet(set: ApartmentGeometrySet): void {
+  const { windows, fixtures, ...surfaces } = set;
+  for (const g of [...Object.values(surfaces), ...Object.values(windows), ...Object.values(fixtures)]) {
+    g?.dispose();
+  }
+}

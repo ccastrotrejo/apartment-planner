@@ -10,7 +10,8 @@ import { computeClearances, evaluateLayout } from '../layout/collision';
 import { pieceWorldPolys, unexpectedLayoutProblems, WalkCheck } from '../layout/walkCheck';
 import { buildApartmentGeometrySet } from '../scene/apartmentGeometries';
 import { getFurnitureParts } from '../scene/furnitureGeometries';
-import { decodeLayoutCode, encodeLayoutCode, ft } from '../utils/units';
+import { diffRegions, rectsToRegion, regionArea } from '../geometry/plan2d';
+import { decodeLayoutCode, encodeLayoutCode, ft, sanitizeSavedLayouts } from '../utils/units';
 import type { PlacementTuple } from '../types';
 
 describe('Residence A4 floor-plan solver & circulation', () => {
@@ -133,5 +134,43 @@ describe('3D apartment & furniture geometry integrity', () => {
     expect(encoded.startsWith('A4:')).toBe(true);
     const decoded = decodeLayoutCode(encoded, (k) => Boolean(FURNITURE_CATALOG[k]));
     expect(decoded).toEqual(plan.mainLayout);
+  });
+});
+
+describe('Untrusted layout input', () => {
+  const isPiece = (k: string) => Boolean(FURNITURE_CATALOG[k]);
+  const code = (rows: unknown) => `A4:${btoa(JSON.stringify(rows))}`;
+
+  it('rejects layout codes with out-of-bounds coordinates, too many items, or oversized text', () => {
+    expect(decodeLayoutCode(code([['sectional', 1e308, 10, 0]]), isPiece)).toBeNull();
+    expect(decodeLayoutCode(code(Array.from({ length: 201 }, () => ['sectional', 10, 10, 0])), isPiece)).toBeNull();
+    expect(decodeLayoutCode(`A4:${'A'.repeat(40_000)}`, isPiece)).toBeNull();
+    expect(decodeLayoutCode(code([['sectional', 10, 20, 450]]), isPiece)).toEqual([['sectional', 10, 20, 90]]);
+  });
+
+  it('keeps valid saved layouts and drops malformed entries and unknown pieces', () => {
+    const saved = sanitizeSavedLayouts(
+      {
+        good: { name: '  Cozy  ', at: 2, items: [['sectional', 10, 20, 0], ['not-a-piece', 1, 1, 0]] },
+        older: { name: 'Empty', at: 1, items: [] },
+        broken: { name: 'Bad', at: 3, items: 'nope' },
+        junk: 42,
+      },
+      isPiece,
+    );
+    expect(saved).toEqual([
+      { id: 'good', name: 'Cozy', at: 2, items: [['sectional', 10, 20, 0]] },
+      { id: 'older', name: 'Empty', at: 1, items: [] },
+    ]);
+    expect(sanitizeSavedLayouts([['sectional', 1, 1, 0]], isPiece)).toEqual([]);
+  });
+});
+
+describe('Plan region booleans', () => {
+  it('computes polygon differences with holes', () => {
+    const outer = rectsToRegion([[0, 0, 10, 10]]);
+    const hole = rectsToRegion([[4, 4, 6, 6]]);
+    expect(regionArea(diffRegions(outer, hole))).toBeCloseTo(96, 6);
+    expect(regionArea(rectsToRegion([[0, 0, 2, 2]], 1))).toBeCloseTo(16, 6);
   });
 });

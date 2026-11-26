@@ -8,17 +8,27 @@ import { ApartmentScene, type StageHandle } from './scene/ApartmentScene';
 import { renderFurnitureThumbnails } from './scene/furnitureGeometries';
 import { createEmptyOverlayRefs } from './scene/overlayRefs';
 import type { Compass, PlacedItem, PlacementTuple, SavedLayout } from './types';
-import { fmtFtIn, fmtInch, normAngle, sameLayoutItems } from './utils/units';
+import {
+  fmtFtIn,
+  fmtInch,
+  normAngle,
+  sameLayoutItems,
+  sanitizePlacementTuples,
+  sanitizeSavedLayouts,
+} from './utils/units';
 import styles from './App.module.css';
 
 const LS_WORK = 'a4-planner-work-v1';
 const LS_SAVED = 'a4-planner-saved-v1';
 const LS_LIB_COLLAPSED = 'a4-planner-lib-collapsed';
 
-function readJson<T>(key: string): T | null {
+const isCatalogPiece = (key: string): boolean => Boolean(FURNITURE_CATALOG[key]);
+
+/** Parses a localStorage entry; the result is untrusted and must be sanitized by the caller. */
+function readJson(key: string): unknown {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -51,8 +61,9 @@ export function App() {
   const plan = useMemo(() => solveApartmentPlan(LODEN_A4_SPEC), []);
 
   const [items, setItems] = useState<PlacedItem[]>(() => {
-    const stored = readJson<PlacementTuple[]>(LS_WORK);
-    return tuplesToPlacedItems(Array.isArray(stored) && stored.length > 0 ? stored : plan.mainLayout);
+    // `null` means first visit (or corrupt data); an empty array is a deliberately cleared room and is kept.
+    const stored = sanitizePlacementTuples(readJson(LS_WORK), isCatalogPiece);
+    return tuplesToPlacedItems(stored ?? plan.mainLayout);
   });
   const [history, setHistory] = useState<PlacementTuple[][]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -69,13 +80,9 @@ export function App() {
   });
   const [libDrawerOpen, setLibDrawerOpen] = useState(false);
   const [layoutsOpen, setLayoutsOpen] = useState(false);
-  const [savedLayouts, setSavedLayouts] = useState<SavedLayout[]>(() => {
-    const raw = readJson<Record<string, Omit<SavedLayout, 'id'>>>(LS_SAVED);
-    if (!raw || typeof raw !== 'object') return [];
-    return Object.entries(raw)
-      .map(([id, entry]) => ({ id, ...entry }))
-      .sort((a, b) => (b.at || 0) - (a.at || 0));
-  });
+  const [savedLayouts, setSavedLayouts] = useState<SavedLayout[]>(() =>
+    sanitizeSavedLayouts(readJson(LS_SAVED), isCatalogPiece),
+  );
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [darkTheme, setDarkTheme] = useState<boolean>(() =>
@@ -85,6 +92,11 @@ export function App() {
   );
 
   const stageRef = useRef<StageHandle>(null);
+  const layoutsBtnRef = useRef<HTMLButtonElement>(null);
+  const closeLayouts = useCallback(() => {
+    setLayoutsOpen(false);
+    layoutsBtnRef.current?.focus();
+  }, []);
   const overlayRefs = useMemo(() => createEmptyOverlayRefs(), []);
   const nextIdRef = useRef(100);
 
@@ -342,352 +354,355 @@ export function App() {
   };
 
   return (
-    <div
-      className={styles.app}
-      data-lib={libCollapsed ? 'collapsed' : 'open'}
-      data-locked={locked ? 'true' : 'false'}
-    >
-      <header className={styles.bar}>
-        <div className={styles.brand}>
-          <h1>{plan.spec.title}</h1>
-          <span>{plan.spec.subtitle}</span>
-        </div>
-
-        <button
-          className={`${styles.btn} ${styles.onlyNarrow}`}
-          type="button"
-          aria-controls="furniture-lib"
-          aria-expanded={libDrawerOpen}
-          onClick={() => setLibDrawerOpen((v) => !v)}
-        >
-          Add furniture
-        </button>
-
-        <div className={styles.seg} role="group" aria-label="Preset layout">
-          <button
-            type="button"
-            aria-pressed={isStandardActive}
-            onClick={() => loadLayoutTuples(plan.mainLayout, null)}
-          >
-            Standard
-          </button>
-          <button
-            type="button"
-            aria-pressed={isGuestActive}
-            onClick={() => loadLayoutTuples(plan.guestLayout, null)}
-          >
-            With guest
-          </button>
-        </div>
-
-        <div className={styles.seg} role="group" aria-label="Camera view">
-          <button type="button" aria-pressed={view === 'plan'} onClick={() => setView('plan')}>
-            Plan
-          </button>
-          <button type="button" aria-pressed={view === '3d'} onClick={() => setView('3d')}>
-            3D
-          </button>
-        </div>
-
-        <div className={styles.seg} role="group" aria-label="Wall height">
-          <button
-            type="button"
-            aria-pressed={!fullWalls}
-            title="Cutaway 4 ft walls"
-            onClick={() => setFullWalls(false)}
-          >
-            4′ walls
-          </button>
-          <button
-            type="button"
-            aria-pressed={fullWalls}
-            title="Full 7′6″ apartment walls"
-            onClick={() => setFullWalls(true)}
-          >
-            Full
-          </button>
-        </div>
-
-        <button
-          className={styles.btn}
-          type="button"
-          aria-pressed={seeThrough}
-          title="Ghost exterior and interior walls so every room stays visible from any angle"
-          onClick={() => setSeeThrough((v) => !v)}
-        >
-          See-through
-        </button>
-
-        <button
-          className={styles.btn}
-          type="button"
-          aria-pressed={locked}
-          title={
-            locked
-              ? 'Furniture is locked: dragging orbits or pans the view. Click to unlock.'
-              : 'Lock furniture so dragging only moves the camera'
-          }
-          onClick={() => setLocked((v) => !v)}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <rect x="3" y="7" width="10" height="8" rx="1.5" fill="currentColor" />
-            <path
-              d={locked ? 'M5 7V5a3 3 0 0 1 6 0v2' : 'M5 7V5a3 3 0 0 1 5.8-1.1'}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-            />
-          </svg>
-          {locked ? 'Locked' : 'Lock'}
-        </button>
-
-        <button
-          className={`${styles.chip} ${
-            layoutEval.statusKind === 'bad'
-              ? styles.chipBad
-              : layoutEval.statusKind === 'warn'
-                ? styles.chipWarn
-                : styles.chipOk
-          }`}
-          type="button"
-          onClick={() => {
-            const target =
-              layoutEval.evaluated.find((i) => i.bad) ?? layoutEval.evaluated.find((i) => i.warn);
-            if (target) setSelectedId(target.id);
-          }}
-        >
-          {layoutEval.statusKind === 'bad' ? '✕ ' : layoutEval.statusKind === 'warn' ? '⚠ ' : '✓ '}
-          {layoutEval.statusText}
-        </button>
-
-        <button
-          className={styles.btn}
-          type="button"
-          disabled={locked || history.length === 0}
-          onClick={undo}
-        >
-          Undo
-        </button>
-
-        <button className={styles.btn} type="button" onClick={() => setLayoutsOpen(true)}>
-          Layouts
-        </button>
-      </header>
-
-      <aside
-        id="furniture-lib"
-        className={styles.lib}
-        data-open={libDrawerOpen ? 'true' : 'false'}
-        aria-label="Furniture library"
+    <>
+      <div
+        className={styles.app}
+        data-lib={libCollapsed ? 'collapsed' : 'open'}
+        data-locked={locked ? 'true' : 'false'}
+        inert={layoutsOpen}
       >
-        <div className={styles.libHead}>
-          <div className={styles.libIntro}>
-            <h2>Furniture</h2>
-            <p>
-              {locked
-                ? 'Furniture is locked. Unlock it to add or rearrange pieces.'
-                : 'Drag a piece onto the apartment, or press + to place it in the center of the view.'}
-            </p>
+        <header className={styles.bar}>
+          <div className={styles.brand}>
+            <h1>{plan.spec.title}</h1>
+            <span>{plan.spec.subtitle}</span>
           </div>
+
           <button
-            className={styles.libToggle}
+            className={`${styles.btn} ${styles.onlyNarrow}`}
             type="button"
-            aria-expanded={!libCollapsed}
-            aria-label={libCollapsed ? 'Expand furniture panel' : 'Collapse furniture panel'}
-            title={libCollapsed ? 'Expand panel' : 'Collapse panel'}
-            onClick={toggleLibCollapsed}
+            aria-controls="furniture-lib"
+            aria-expanded={libDrawerOpen}
+            onClick={() => setLibDrawerOpen((v) => !v)}
+          >
+            Add furniture
+          </button>
+
+          <div className={styles.seg} role="group" aria-label="Preset layout">
+            <button
+              type="button"
+              aria-pressed={isStandardActive}
+              onClick={() => loadLayoutTuples(plan.mainLayout, null)}
+            >
+              Standard
+            </button>
+            <button
+              type="button"
+              aria-pressed={isGuestActive}
+              onClick={() => loadLayoutTuples(plan.guestLayout, null)}
+            >
+              With guest
+            </button>
+          </div>
+
+          <div className={styles.seg} role="group" aria-label="Camera view">
+            <button type="button" aria-pressed={view === 'plan'} onClick={() => setView('plan')}>
+              Plan
+            </button>
+            <button type="button" aria-pressed={view === '3d'} onClick={() => setView('3d')}>
+              3D
+            </button>
+          </div>
+
+          <div className={styles.seg} role="group" aria-label="Wall height">
+            <button
+              type="button"
+              aria-pressed={!fullWalls}
+              title="Cutaway 4 ft walls"
+              onClick={() => setFullWalls(false)}
+            >
+              4′ walls
+            </button>
+            <button
+              type="button"
+              aria-pressed={fullWalls}
+              title="Full 7′6″ apartment walls"
+              onClick={() => setFullWalls(true)}
+            >
+              Full
+            </button>
+          </div>
+
+          <button
+            className={styles.btn}
+            type="button"
+            aria-pressed={seeThrough}
+            title="Ghost exterior and interior walls so every room stays visible from any angle"
+            onClick={() => setSeeThrough((v) => !v)}
+          >
+            See-through
+          </button>
+
+          <button
+            className={styles.btn}
+            type="button"
+            aria-pressed={locked}
+            title={
+              locked
+                ? 'Furniture is locked: dragging orbits or pans the view. Click to unlock.'
+                : 'Lock furniture so dragging only moves the camera'
+            }
+            onClick={() => setLocked((v) => !v)}
           >
             <svg viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="3" y="7" width="10" height="8" rx="1.5" fill="currentColor" />
               <path
-                d="M10 3.5 5.5 8l4.5 4.5"
+                d={locked ? 'M5 7V5a3 3 0 0 1 6 0v2' : 'M5 7V5a3 3 0 0 1 5.8-1.1'}
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeWidth="1.6"
               />
             </svg>
-            <span className={styles.libRail}>Furniture</span>
+            {locked ? 'Locked' : 'Lock'}
           </button>
-        </div>
 
-        <div className={styles.libList}>
-          {groupedCatalog.map(([groupName, specs]) => (
-            <React.Fragment key={groupName}>
-              <div className={styles.grp}>{groupName}</div>
-              {specs.map((spec) => {
-                const count = pieceCounts[spec.key] ?? 0;
-                const thumbUrl = thumbnails[spec.key];
-                return (
-                  <div
-                    key={spec.key}
-                    className={styles.row}
-                    draggable={!locked}
-                    onDragStart={(e) => {
-                      if (locked) return;
-                      e.dataTransfer.setData('text/plain', spec.key);
-                      e.dataTransfer.effectAllowed = 'copy';
-                    }}
-                  >
-                    <span className={styles.thumb}>
-                      {thumbUrl ? (
-                        <img src={thumbUrl} alt="" />
-                      ) : (
-                        <span className={styles.swatch} style={{ background: spec.swatch }} />
-                      )}
-                    </span>
-                    <div>
-                      <div className={styles.rowName}>
-                        {spec.name}
-                        {count > 0 && <span className={styles.rowCount}>×{count}</span>}
-                      </div>
-                      <div className={styles.rowDim}>
-                        {fmtInch(spec.size[0])} × {fmtInch(spec.size[1])}
-                        {spec.libNote ? ` · ${spec.libNote}` : ''}
-                      </div>
-                    </div>
-                    <button
-                      className={styles.addBtn}
-                      type="button"
-                      disabled={locked}
-                      aria-label={`Add ${spec.name}`}
-                      onClick={() => {
-                        const center = stageRef.current?.getViewCenterFloorPoint() ?? [57, 96];
-                        addPieceAt(spec.key, center[0], center[1]);
-                        if (typeof window !== 'undefined' && window.innerWidth <= 899) {
-                          setLibDrawerOpen(false);
-                        }
+          <button
+            className={`${styles.chip} ${
+              layoutEval.statusKind === 'bad'
+                ? styles.chipBad
+                : layoutEval.statusKind === 'warn'
+                  ? styles.chipWarn
+                  : styles.chipOk
+            }`}
+            type="button"
+            onClick={() => {
+              const target =
+                layoutEval.evaluated.find((i) => i.bad) ?? layoutEval.evaluated.find((i) => i.warn);
+              if (target) setSelectedId(target.id);
+            }}
+          >
+            {layoutEval.statusKind === 'bad' ? '✕ ' : layoutEval.statusKind === 'warn' ? '⚠ ' : '✓ '}
+            {layoutEval.statusText}
+          </button>
+
+          <button
+            className={styles.btn}
+            type="button"
+            disabled={locked || history.length === 0}
+            onClick={undo}
+          >
+            Undo
+          </button>
+
+          <button ref={layoutsBtnRef} className={styles.btn} type="button" onClick={() => setLayoutsOpen(true)}>
+            Layouts
+          </button>
+        </header>
+
+        <aside
+          id="furniture-lib"
+          className={styles.lib}
+          data-open={libDrawerOpen ? 'true' : 'false'}
+          aria-label="Furniture library"
+        >
+          <div className={styles.libHead}>
+            <div className={styles.libIntro}>
+              <h2>Furniture</h2>
+              <p>
+                {locked
+                  ? 'Furniture is locked. Unlock it to add or rearrange pieces.'
+                  : 'Drag a piece onto the apartment, or press + to place it in the center of the view.'}
+              </p>
+            </div>
+            <button
+              className={styles.libToggle}
+              type="button"
+              aria-expanded={!libCollapsed}
+              aria-label={libCollapsed ? 'Expand furniture panel' : 'Collapse furniture panel'}
+              title={libCollapsed ? 'Expand panel' : 'Collapse panel'}
+              onClick={toggleLibCollapsed}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M10 3.5 5.5 8l4.5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className={styles.libRail}>Furniture</span>
+            </button>
+          </div>
+
+          <div className={styles.libList}>
+            {groupedCatalog.map(([groupName, specs]) => (
+              <React.Fragment key={groupName}>
+                <div className={styles.grp}>{groupName}</div>
+                {specs.map((spec) => {
+                  const count = pieceCounts[spec.key] ?? 0;
+                  const thumbUrl = thumbnails[spec.key];
+                  return (
+                    <div
+                      key={spec.key}
+                      className={styles.row}
+                      draggable={!locked}
+                      onDragStart={(e) => {
+                        if (locked) return;
+                        e.dataTransfer.setData('text/plain', spec.key);
+                        e.dataTransfer.effectAllowed = 'copy';
                       }}
                     >
-                      +
-                    </button>
-                  </div>
-                );
-              })}
-            </React.Fragment>
-          ))}
-        </div>
-      </aside>
+                      <span className={styles.thumb}>
+                        {thumbUrl ? (
+                          <img src={thumbUrl} alt="" />
+                        ) : (
+                          <span className={styles.swatch} style={{ background: spec.swatch }} />
+                        )}
+                      </span>
+                      <div>
+                        <div className={styles.rowName}>
+                          {spec.name}
+                          {count > 0 && <span className={styles.rowCount}>×{count}</span>}
+                        </div>
+                        <div className={styles.rowDim}>
+                          {fmtInch(spec.size[0])} × {fmtInch(spec.size[1])}
+                          {spec.libNote ? ` · ${spec.libNote}` : ''}
+                        </div>
+                      </div>
+                      <button
+                        className={styles.addBtn}
+                        type="button"
+                        disabled={locked}
+                        aria-label={`Add ${spec.name}`}
+                        onClick={() => {
+                          const center = stageRef.current?.getViewCenterFloorPoint() ?? [57, 96];
+                          addPieceAt(spec.key, center[0], center[1]);
+                          if (typeof window !== 'undefined' && window.innerWidth <= 899) {
+                            setLibDrawerOpen(false);
+                          }
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+        </aside>
 
-      <main
-        ref={(node) => {
-          overlayRefs.current = { ...overlayRefs.current, stageBox: node };
-        }}
-        className={styles.stage}
-      >
-        <ApartmentScene
-          plan={plan}
-          items={layoutEval.evaluated}
-          selectedId={selectedId}
-          clearances={clearances}
-          view={view}
-          fullWalls={fullWalls}
-          seeThrough={seeThrough}
-          locked={locked}
-          darkTheme={darkTheme}
-          compactClass={styles.labelsCompact}
-          tinyClass={styles.labelsTiny}
-          overlayRefs={overlayRefs}
-          stageRef={stageRef}
-          onSelect={setSelectedId}
-          onMoveItem={moveItem}
-          onEndMoveItem={() => {}}
-          onTransformItem={transformItem}
-          onDropPieceAt={addPieceAt}
-          onCanvasKeyDown={handleCanvasKeyDown}
-        />
-
-        {/* Projected room labels, clearance callouts, and selection tag (GPU translate3d via direct refs) */}
-        <div
+        <main
           ref={(node) => {
-            overlayRefs.current = { ...overlayRefs.current, container: node };
+            overlayRefs.current = { ...overlayRefs.current, stageBox: node };
           }}
-          className={styles.labels}
+          className={styles.stage}
         >
-          {plan.rooms.map((r, idx) => (
-            <div
-              key={`rm-${idx}`}
-              ref={(node) => {
-                overlayRefs.current.rooms[idx] = node;
-              }}
-              hidden
-              className={styles.roomLabel}
-            >
-              <b>{r.name}</b>
-              {r.size && (
-                <i>
-                  {r.measured ? '' : 'est. '}
-                  {fmtFtIn(r.size[0])} × {fmtFtIn(r.size[1])}
-                </i>
-              )}
-            </div>
-          ))}
-          {(['N', 'E', 'S', 'W'] as Compass[]).map((dir) => (
-            <div
-              key={`dim-${dir}`}
-              ref={(node) => {
-                overlayRefs.current.dims[dir] = node;
-              }}
-              hidden
-              className={styles.dimBadge}
-            />
-          ))}
+          <ApartmentScene
+            plan={plan}
+            items={layoutEval.evaluated}
+            selectedId={selectedId}
+            clearances={clearances}
+            view={view}
+            fullWalls={fullWalls}
+            seeThrough={seeThrough}
+            locked={locked}
+            darkTheme={darkTheme}
+            compactClass={styles.labelsCompact}
+            tinyClass={styles.labelsTiny}
+            overlayRefs={overlayRefs}
+            stageRef={stageRef}
+            onSelect={setSelectedId}
+            onMoveItem={moveItem}
+            onEndMoveItem={() => {}}
+            onTransformItem={transformItem}
+            onDropPieceAt={addPieceAt}
+            onCanvasKeyDown={handleCanvasKeyDown}
+          />
+
+          {/* Projected room labels, clearance callouts, and selection tag (GPU translate3d via direct refs) */}
           <div
             ref={(node) => {
-              overlayRefs.current = { ...overlayRefs.current, tag: node };
+              overlayRefs.current = { ...overlayRefs.current, container: node };
             }}
-            hidden
-            className={styles.pieceTag}
-          />
-        </div>
-
-        <div className={styles.zoomStack}>
-          <button
-            className={styles.btn}
-            type="button"
-            aria-label="Zoom in"
-            onClick={() => stageRef.current?.zoomBy(1.25)}
+            className={styles.labels}
           >
-            +
-          </button>
-          <button
-            className={styles.btn}
-            type="button"
-            aria-label="Zoom out"
-            onClick={() => stageRef.current?.zoomBy(0.8)}
-          >
-            −
-          </button>
-          <button
-            className={styles.btn}
-            type="button"
-            aria-label="Fit apartment in view"
-            title="Fit apartment"
-            onClick={() => stageRef.current?.fitView()}
-          >
-            ⤢
-          </button>
-        </div>
+            {plan.rooms.map((r, idx) => (
+              <div
+                key={`rm-${idx}`}
+                ref={(node) => {
+                  overlayRefs.current.rooms[idx] = node;
+                }}
+                hidden
+                className={styles.roomLabel}
+              >
+                <b>{r.name}</b>
+                {r.size && (
+                  <i>
+                    {r.measured ? '' : 'est. '}
+                    {fmtFtIn(r.size[0])} × {fmtFtIn(r.size[1])}
+                  </i>
+                )}
+              </div>
+            ))}
+            {(['N', 'E', 'S', 'W'] as Compass[]).map((dir) => (
+              <div
+                key={`dim-${dir}`}
+                ref={(node) => {
+                  overlayRefs.current.dims[dir] = node;
+                }}
+                hidden
+                className={styles.dimBadge}
+              />
+            ))}
+            <div
+              ref={(node) => {
+                overlayRefs.current = { ...overlayRefs.current, tag: node };
+              }}
+              hidden
+              className={styles.pieceTag}
+            />
+          </div>
 
-        {!selectedItem && <div className={styles.hint}>{hintText}</div>}
+          <div className={styles.zoomStack}>
+            <button
+              className={styles.btn}
+              type="button"
+              aria-label="Zoom in"
+              onClick={() => stageRef.current?.zoomBy(1.25)}
+            >
+              +
+            </button>
+            <button
+              className={styles.btn}
+              type="button"
+              aria-label="Zoom out"
+              onClick={() => stageRef.current?.zoomBy(0.8)}
+            >
+              −
+            </button>
+            <button
+              className={styles.btn}
+              type="button"
+              aria-label="Fit apartment in view"
+              title="Fit apartment"
+              onClick={() => stageRef.current?.fitView()}
+            >
+              ⤢
+            </button>
+          </div>
 
-        {selectedItem && (
-          <SelectionCard
-            item={selectedItem}
-            clearances={clearances}
-            locked={locked}
-            positionSlot="br"
-            cardRef={(node) => {
-              overlayRefs.current = { ...overlayRefs.current, card: node };
-            }}
-            onDeselect={() => setSelectedId(null)}
-            onTransform={() => transformItem(selectedItem.id)}
-            onRotate={rotateSelected}
-            onDuplicate={duplicateSelected}
-            onRemove={removeSelected}
-          />
-        )}
-      </main>
+          {!selectedItem && <div className={styles.hint}>{hintText}</div>}
+
+          {selectedItem && (
+            <SelectionCard
+              item={selectedItem}
+              clearances={clearances}
+              locked={locked}
+              positionSlot="br"
+              cardRef={(node) => {
+                overlayRefs.current = { ...overlayRefs.current, card: node };
+              }}
+              onDeselect={() => setSelectedId(null)}
+              onTransform={() => transformItem(selectedItem.id)}
+              onRotate={rotateSelected}
+              onDuplicate={duplicateSelected}
+              onRemove={removeSelected}
+            />
+          )}
+        </main>
+      </div>
 
       <LayoutsDialog
         open={layoutsOpen}
@@ -696,7 +711,7 @@ export function App() {
         ideas={plan.ideas}
         savedLayouts={savedLayouts}
         activeSavedId={activeSavedId}
-        onClose={() => setLayoutsOpen(false)}
+        onClose={closeLayouts}
         onLoadLayout={loadLayoutTuples}
         onSaveNew={(name) => {
           const id = `l-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -715,6 +730,6 @@ export function App() {
           if (activeSavedId === id) setActiveSavedId(null);
         }}
       />
-    </div>
+    </>
   );
 }

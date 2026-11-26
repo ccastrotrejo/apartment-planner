@@ -1,8 +1,15 @@
-import * as polygonClipping from 'polygon-clipping';
+import * as polygonClippingModule from 'polygon-clipping';
 import * as THREE from 'three';
 import type { HitRect, Rect4, Vec2 } from '../types';
 
-export type PlanRegion = polygonClipping.MultiPolygon;
+// polygon-clipping's typings declare named exports, but its ESM build (used by Vite) only ships a
+// default export, while the CJS build (used by Vitest) exposes both. Resolve the real API once here.
+type PolygonClippingApi = typeof polygonClippingModule;
+const polygonClipping: PolygonClippingApi =
+  (polygonClippingModule as PolygonClippingApi & { readonly default?: PolygonClippingApi }).default ??
+  polygonClippingModule;
+
+export type PlanRegion = polygonClippingModule.MultiPolygon;
 
 export interface PolygonWithHoles {
   readonly outer: Vec2[];
@@ -32,11 +39,11 @@ export function cleanRing(raw: ReadonlyArray<readonly [number, number]>): Vec2[]
 const SNAP = 1000;
 const snap = (v: number): number => Math.round(v * SNAP) / SNAP;
 
-function toClosedPairRing(pts: ReadonlyArray<Vec2>): polygonClipping.Ring {
+function toClosedPairRing(pts: ReadonlyArray<Vec2>): polygonClippingModule.Ring {
   // Snap to a 0.001" grid (same precision Clipper used) so the sweep line never sees near-coincident floats.
   const cleaned = cleanRing(pts.map(([x, z]) => [snap(x), snap(z)] as const));
   if (cleaned.length < 3) return [];
-  const pairs: polygonClipping.Pair[] = cleaned.map(([x, z]) => [x, z]);
+  const pairs: polygonClippingModule.Pair[] = cleaned.map(([x, z]) => [x, z]);
   pairs.push([cleaned[0][0], cleaned[0][1]]);
   return pairs;
 }
@@ -51,7 +58,7 @@ export function rectToPoly([x0, z0, x1, z1]: Rect4): Vec2[] {
 }
 
 export function polysToRegion(polys: ReadonlyArray<ReadonlyArray<Vec2>>): PlanRegion {
-  const valid: polygonClipping.Polygon[] = [];
+  const valid: polygonClippingModule.Polygon[] = [];
   for (const p of polys) {
     const ring = toClosedPairRing(p);
     if (ring.length >= 4) valid.push([ring]);

@@ -9,6 +9,9 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    // three (~720 kB) and the R3F/postprocessing stack (~570 kB) are isolated vendor chunks that
+    // cache independently of app code; only warn if one of them grows past this.
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
         manualChunks: {

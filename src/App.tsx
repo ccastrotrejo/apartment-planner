@@ -337,11 +337,11 @@ export function App() {
 
   const hintText = locked
     ? view === 'plan'
-      ? 'Furniture is locked · drag anywhere to pan · scroll to zoom · click a piece to inspect'
-      : 'Furniture is locked · drag anywhere to orbit, right-drag to pan · scroll to zoom'
+      ? 'Furniture is locked · WASD / arrows or drag to pan · scroll to zoom · click a piece to inspect'
+      : 'Furniture is locked · WASD / arrows to move · drag to orbit · scroll to zoom'
     : view === 'plan'
-      ? 'Drag a piece to move · R rotates · Delete removes · scroll to zoom, drag floor to pan'
-      : 'Drag a piece to move · drag floor to orbit, right-drag to pan · scroll to zoom';
+      ? 'Drag a piece to move · R rotates · Delete removes · WASD pans · scroll to zoom'
+      : 'Drag a piece to move · WASD / arrows to move the view · drag floor to orbit · scroll to zoom';
 
   const toggleLibCollapsed = () => {
     if (typeof window !== 'undefined' && window.innerWidth <= 899) {

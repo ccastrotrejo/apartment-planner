@@ -16,6 +16,7 @@ import type { PlacementTuple } from '../types';
 import { shotFromQuery } from '../scene/shots';
 import { renderSettingsFromQuery } from '../scene/renderSettings';
 import { easeOutUi } from '../scene/motion';
+import { panIntent, panKeyFor } from '../scene/keyboardPan';
 
 describe('Residence A4 floor-plan solver & circulation', () => {
   const plan = solveApartmentPlan(LODEN_A4_SPEC);
@@ -223,5 +224,23 @@ describe('render settings and motion easing', () => {
       expect(v).toBeGreaterThanOrEqual(prev);
       prev = v;
     }
+  });
+});
+
+describe('keyboard camera panning', () => {
+  it('pans with WASD always and with arrows only when they are not nudging a piece', () => {
+    expect(panKeyFor('W', true)).toBe('w');
+    expect(panKeyFor('ArrowLeft', false)).toBe('arrowleft');
+    expect(panKeyFor('ArrowLeft', true)).toBeNull();
+    expect(panKeyFor('r', false)).toBeNull();
+  });
+
+  it('combines held keys into a normalized camera-relative intent', () => {
+    expect(panIntent(new Set(['w']))).toEqual([0, 1]);
+    const [r, f] = panIntent(new Set(['w', 'd']));
+    expect(Math.hypot(r, f)).toBeCloseTo(1);
+    expect(r).toBeGreaterThan(0);
+    expect(panIntent(new Set(['a', 'arrowright']))).toEqual([0, 0]);
+    expect(panIntent(new Set(['w', 'arrowup']))).toEqual([0, 1]);
   });
 });

@@ -235,6 +235,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
           selectedId={selectedId}
           clearances={clearances}
           view={view}
+          locked={locked}
           compactClass={compactClass}
           tinyClass={tinyClass}
           overlayRefs={overlayRefs}

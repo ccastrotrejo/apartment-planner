@@ -9,6 +9,7 @@ import { sizeRectForSpec } from '../layout/collision';
 import type { OverlayDomRefs } from './overlayRefs';
 import { shotFromQuery } from './shots';
 import { MOTION_MS, damp, easeInOutUi, easeOutUi, prefersReducedMotion } from './motion';
+import { isTypingTarget, panIntent, panKeyFor } from './keyboardPan';
 
 interface CameraTween {
   readonly start: number;
@@ -44,6 +45,7 @@ export function SceneController({
   selectedId,
   clearances,
   view,
+  locked,
   compactClass,
   tinyClass,
   overlayRefs,
@@ -59,6 +61,7 @@ export function SceneController({
   selectedId: number | null;
   clearances: Clearances;
   view: '3d' | 'plan';
+  locked: boolean;
   compactClass: string;
   tinyClass: string;
   overlayRefs: React.MutableRefObject<OverlayDomRefs>;
@@ -201,6 +204,49 @@ export function SceneController({
     invalidate();
   };
 
+  // WASD / arrow-key panning, relative to where the camera faces. Arrows stay with piece nudging
+  // while a piece is selected and furniture is unlocked.
+  const heldKeysRef = useRef<Set<string>>(new Set());
+  const fastRef = useRef(false);
+  const panVelRef = useRef(new THREE.Vector2());
+  const arrowsNudgePiece = !locked && selectedId !== null;
+  useEffect(() => {
+    const held = heldKeysRef.current;
+    const onDown = (e: KeyboardEvent) => {
+      fastRef.current = e.shiftKey;
+      if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+      const k = panKeyFor(e.key, arrowsNudgePiece);
+      if (!k) return;
+      e.preventDefault();
+      cameraTweenRef.current = null;
+      held.add(k);
+      invalidate();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      fastRef.current = e.shiftKey;
+      held.delete(e.key.toLowerCase());
+    };
+    const clear = () => held.clear();
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', clear);
+    };
+  }, [arrowsNudgePiece, invalidate]);
+
+  // Arrow keys switching to piece nudging must not leave a stale held arrow behind.
+  useEffect(() => {
+    if (!arrowsNudgePiece) return;
+    for (const k of [...heldKeysRef.current]) if (k.startsWith('arrow')) heldKeysRef.current.delete(k);
+  }, [arrowsNudgePiece]);
+
+  const panRight = useMemo(() => new THREE.Vector3(), []);
+  const panForward = useMemo(() => new THREE.Vector3(), []);
+  const panStep = useMemo(() => new THREE.Vector3(), []);
+
   // Camera tweens + piece lift/settle springs. Only requests frames while something is moving.
   const itemYById = useMemo(() => new Map(items.map((i) => [i.id, i.y])), [items]);
   useFrame((_, delta) => {
@@ -220,8 +266,51 @@ export function SceneController({
       else active = true;
     }
 
-    const now = performance.now();
     const dt = Math.min(delta, 1 / 20);
+    const cam = activeCamera();
+    const ctl = activeControls();
+    if (cam && ctl) {
+      const [ir, ifw] = panIntent(heldKeysRef.current);
+      // Speed scales with how far out you are, so it feels the same zoomed in or out (in/s).
+      const reach =
+        view === 'plan'
+          ? 180 / Math.max(0.4, (cam as THREE.OrthographicCamera).zoom)
+          : Math.min(300, Math.max(50, cam.position.distanceTo(ctl.target) * 0.5));
+      const speed = reach * (fastRef.current ? 2.4 : 1);
+      const vel = panVelRef.current;
+      if (reducedMotion) {
+        vel.set(ir * speed, ifw * speed);
+      } else {
+        vel.set(damp(vel.x, ir * speed, 14, dt), damp(vel.y, ifw * speed, 14, dt));
+      }
+      if (vel.lengthSq() > 0.25) {
+        if (view === 'plan') {
+          panRight.set(1, 0, 0);
+          panForward.set(0, 0, -1);
+        } else {
+          cam.getWorldDirection(panForward);
+          panForward.y = 0;
+          if (panForward.lengthSq() < 1e-6) panForward.set(0, 0, -1);
+          panForward.normalize();
+          panRight.crossVectors(panForward, cam.up).normalize();
+        }
+        panStep.copy(panRight).multiplyScalar(vel.x * dt).addScaledVector(panForward, vel.y * dt);
+        // Keep the orbit target near the apartment so you can't drift off into the void.
+        const margin = 36;
+        const tx = Math.min(x1 + margin, Math.max(x0 - margin, ctl.target.x + panStep.x));
+        const tz = Math.min(z1 + margin, Math.max(z0 - margin, ctl.target.z + panStep.z));
+        panStep.set(tx - ctl.target.x, 0, tz - ctl.target.z);
+        cam.position.add(panStep);
+        ctl.target.add(panStep);
+        ctl.update();
+        active = true;
+      } else {
+        vel.set(0, 0);
+        if (ir !== 0 || ifw !== 0) active = true;
+      }
+    }
+
+    const now = performance.now();
     for (const [id, grp] of itemGroupsRef.current) {
       const baseY = itemYById.get(id);
       if (baseY === undefined) continue;

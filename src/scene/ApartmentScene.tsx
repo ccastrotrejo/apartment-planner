@@ -10,6 +10,7 @@ import { ApartmentArchitecture, EnvironmentAndLighting } from './ApartmentArchit
 import type { OverlayDomRefs } from './overlayRefs';
 import { renderSettingsFromQuery } from './renderSettings';
 import { prefersReducedMotion } from './motion';
+import type { LightingMood } from './lightColor';
 import type { PhotoModeApi } from './PathTracedPhoto';
 
 // three-gpu-pathtracer is ~200 kB; only fetch it when photo mode is first opened.
@@ -42,6 +43,7 @@ export interface ApartmentSceneProps {
   readonly onDropPieceAt: (pieceKey: string, x: number, z: number) => void;
   readonly onCanvasKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   readonly photoMode: boolean;
+  readonly mood: LightingMood;
   readonly photoStatusRef: React.RefObject<HTMLElement | null>;
   readonly photoApiRef: React.MutableRefObject<PhotoModeApi | null>;
 }
@@ -69,6 +71,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
     onDropPieceAt,
     onCanvasKeyDown,
     photoMode,
+    mood,
     photoStatusRef,
     photoApiRef,
   } = props;
@@ -200,6 +203,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
           darkTheme={darkTheme}
           shadowTrigger={shadowTrigger}
           settings={settings}
+          mood={mood}
         />
         <ApartmentArchitecture
           plan={plan}
@@ -207,6 +211,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
           fullWalls={fullWalls}
           seeThrough={seeThrough}
           darkTheme={darkTheme}
+          mood={mood}
         />
 
         <group>
@@ -217,6 +222,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
               view={view}
               darkTheme={darkTheme}
               registerGroup={registerGroup}
+              mood={mood}
               onPiecePointerDown={handlePiecePointerDown}
             />
           ))}

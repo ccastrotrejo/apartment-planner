@@ -15,6 +15,8 @@ import { applyPhotoscan, PHOTOSCANS } from './photoscanTextures';
 import { TEX_INCHES } from './textures';
 import type { SolvedPlan } from '../types';
 import { hdriUrl, type RenderSettings } from './renderSettings';
+import { EveningDownlights } from './EveningLights';
+import { kelvinToColor, TASK_WHITE_K, WARM_WHITE_K, type LightingMood } from './lightColor';
 
 export function EnvironmentAndLighting({
   plan,
@@ -22,13 +24,18 @@ export function EnvironmentAndLighting({
   darkTheme,
   shadowTrigger,
   settings,
+  mood,
 }: {
   plan: SolvedPlan;
   view: '3d' | 'plan';
   darkTheme: boolean;
   shadowTrigger: unknown;
   settings: RenderSettings;
+  mood: LightingMood;
 }) {
+  const evening = mood === 'evening' && view === '3d';
+  const envIntensityRef = React.useRef(0.85);
+  envIntensityRef.current = evening ? 0.14 : 0.85;
   const { gl, scene, invalidate } = useThree();
   const [x0, z0, x1, z1] = plan.bounds;
   const cx = (x0 + x1) / 2;
@@ -62,7 +69,7 @@ export function EnvironmentAndLighting({
         target.dispose();
         target = next;
         scene.environment = next.texture;
-        scene.environmentIntensity = 0.85;
+        scene.environmentIntensity = envIntensityRef.current;
         invalidate();
       },
       undefined,
@@ -90,12 +97,13 @@ export function EnvironmentAndLighting({
       invalidate();
     });
     return () => cancelAnimationFrame(id);
-  }, [gl, view, shadowTrigger, invalidate]);
+  }, [gl, view, shadowTrigger, evening, invalidate]);
 
   useEffect(() => {
-    scene.background = new THREE.Color(darkTheme ? '#161e21' : '#dfe4e2');
+    scene.background = new THREE.Color(evening ? '#1c232b' : darkTheme ? '#161e21' : '#dfe4e2');
+    scene.environmentIntensity = envIntensityRef.current;
     invalidate();
-  }, [scene, darkTheme, invalidate]);
+  }, [scene, darkTheme, evening, invalidate]);
 
   // Restore renderer toneMapping when switching to 2D Plan view (where EffectComposer unmounts)
   useEffect(() => {
@@ -103,6 +111,9 @@ export function EnvironmentAndLighting({
     gl.toneMappingExposure = view === 'plan' ? 0.94 : 0.9;
     invalidate();
   }, [gl, view, invalidate]);
+
+  const warmWhite = useMemo(() => kelvinToColor(WARM_WHITE_K), []);
+  const taskWhite = useMemo(() => kelvinToColor(TASK_WHITE_K), []);
 
   const sunTarget = useMemo(() => {
     const o = new THREE.Object3D();
@@ -115,14 +126,16 @@ export function EnvironmentAndLighting({
       <primitive object={sunTarget} />
       {/* PCSS contact-hardening shadows: sharp at the foot of a piece, soft further away */}
       {view === '3d' && settings.preset === 'high' && <SoftShadows size={18} samples={12} focus={0.4} />}
-      <hemisphereLight args={[0xfff6ea, 0x9a8a74, view === 'plan' ? 0.72 : 0.26]} />
+      <hemisphereLight
+        args={evening ? [0x8a7a66, 0x6b4a2c, 0.16] : [0xfff6ea, 0x9a8a74, view === 'plan' ? 0.72 : 0.26]}
+      />
       {/* Warm natural sun casting crisp grounded soft shadows */}
       <directionalLight
         position={[cx - 165, 410, cz - 235]}
         target={sunTarget}
-        intensity={view === 'plan' ? 0.52 : 2.1}
+        intensity={view === 'plan' ? 0.52 : evening ? 0 : 2.1}
         color={0xffe9cf}
-        castShadow={view === '3d'}
+        castShadow={view === '3d' && !evening}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-bias={-0.0003}
@@ -141,14 +154,15 @@ export function EnvironmentAndLighting({
           <directionalLight
             position={[cx - 240, 140, cz - 310]}
             target={sunTarget}
-            intensity={0.34}
-            color={0xcfe3ff}
+            intensity={evening ? 0.1 : 0.34}
+            color={evening ? 0x7f9bd0 : 0xcfe3ff}
           />
           {/* Kitchen under-cabinet LED task pools */}
-          <pointLight position={[48, 51, 224]} color={0xffe2b4} intensity={160} distance={78} decay={2} />
-          <pointLight position={[48, 51, 304]} color={0xffe2b4} intensity={140} distance={74} decay={2} />
+          <pointLight position={[48, 51, 224]} color={taskWhite} intensity={evening ? 900 : 160} distance={78} decay={2} />
+          <pointLight position={[48, 51, 304]} color={taskWhite} intensity={evening ? 800 : 140} distance={74} decay={2} />
           {/* Bathroom vanity sconce pool */}
-          <pointLight position={[184, 73, 286]} color={0xffebd0} intensity={150} distance={68} decay={2} />
+          <pointLight position={[184, 73, 286]} color={warmWhite} intensity={evening ? 900 : 150} distance={68} decay={2} />
+          {evening && <EveningDownlights />}
           {/* Subtle architectural drop-shadow receiver beneath slab plinth */}
           <mesh position={[cx, -3.22, cz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[900, 900]} />
@@ -166,16 +180,24 @@ export const ApartmentArchitecture = React.memo(function ApartmentArchitecture({
   fullWalls,
   seeThrough,
   darkTheme,
+  mood,
 }: {
   plan: SolvedPlan;
   view: '3d' | 'plan';
   fullWalls: boolean;
   seeThrough: boolean;
   darkTheme: boolean;
+  mood: LightingMood;
 }) {
   const geoSet = useMemo(() => buildApartmentGeometrySet(plan), [plan]);
   const mats = useMemo(() => createApartmentMaterials(), []);
   const invalidate = useThree((st) => st.invalidate);
+
+  // Fixture bulbs glow brighter at night so bloom picks them up.
+  useEffect(() => {
+    mats.bulb.emissiveIntensity = mood === 'evening' ? 3.2 : 1.35;
+    invalidate();
+  }, [mats, mood, invalidate]);
 
   // Swap the procedural oak for a CC0 photoscan once it has streamed in.
   useEffect(

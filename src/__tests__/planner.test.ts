@@ -17,6 +17,7 @@ import { shotFromQuery } from '../scene/shots';
 import { renderSettingsFromQuery } from '../scene/renderSettings';
 import { easeOutUi } from '../scene/motion';
 import { panIntent, panKeyFor } from '../scene/keyboardPan';
+import { kelvinToColor, moodFromQuery } from '../scene/lightColor';
 
 describe('Residence A4 floor-plan solver & circulation', () => {
   const plan = solveApartmentPlan(LODEN_A4_SPEC);
@@ -242,5 +243,21 @@ describe('keyboard camera panning', () => {
     expect(r).toBeGreaterThan(0);
     expect(panIntent(new Set(['a', 'arrowright']))).toEqual([0, 0]);
     expect(panIntent(new Set(['w', 'arrowup']))).toEqual([0, 1]);
+  });
+});
+
+describe('warm lighting color temperature', () => {
+  it('maps 2700 K to a warm white and 6500 K to near-neutral daylight', () => {
+    const warm = kelvinToColor(2700);
+    const daylight = kelvinToColor(6500);
+    expect(warm.r).toBeGreaterThan(warm.b * 2);
+    expect(Math.abs(daylight.r - daylight.b)).toBeLessThan(0.12);
+    expect(kelvinToColor(2700).b).toBeLessThan(kelvinToColor(3000).b);
+  });
+
+  it('defaults to daylight unless ?mood=evening is set', () => {
+    expect(moodFromQuery('?mood=evening')).toBe('evening');
+    expect(moodFromQuery('?mood=party')).toBe('day');
+    expect(moodFromQuery('')).toBe('day');
   });
 });

@@ -267,6 +267,20 @@ export const FURNITURE_CATALOG: Record<string, FurnitureSpec> = {
     },
     note: '54 cm road bike with drop bars, deep-section wheels, spokes, disc rotors, and crankset, cradled in a walnut wall rack.',
   },
+  'gallery-prints': {
+    key: 'gallery-prints',
+    name: 'Framed print pair',
+    group: 'Bedroom',
+    swatch: '#b8643f',
+    size: [41, 1.4, 74],
+    hit: [-20.5, 20.5, -0.7, 0.7],
+    minY: 49,
+    colors: {
+      frame: '#c7a57a',
+      mat: '#f5f2ea',
+    },
+    note: 'Two 19 × 25 in mid-century prints in natural oak frames with white mats, hung 49 in off the floor.',
+  },
   'rug-6x9': {
     key: 'rug-6x9',
     name: "Rug 6 × 9′",

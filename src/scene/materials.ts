@@ -44,6 +44,7 @@ const ROLE_CONFIGS: Record<MaterialRole, RoleConfig> = {
     emissiveIntensity: 0.26,
     envMapIntensity: 0.85,
   },
+  printArt: { roughness: 0.86, tex: 'printArt', envMapIntensity: 0.6 },
   ideScreen: {
     physical: true,
     roughness: 0.14,
@@ -103,7 +104,7 @@ export function createRoleMaterial(
 ): THREE.MeshStandardMaterial {
   const cfg = ROLE_CONFIGS[role];
   const bundle = cfg.tex ? getTextureBundle(cfg.tex) : {};
-  const isFullColorTex = role === 'tvArt' || role === 'ideScreen';
+  const isFullColorTex = role === 'tvArt' || role === 'printArt' || role === 'ideScreen';
   const color = new THREE.Color(isFullColorTex ? 0xffffff : colorHex);
 
   const baseParams: THREE.MeshStandardMaterialParameters = {

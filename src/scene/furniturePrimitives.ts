@@ -196,7 +196,7 @@ export function makePart(
 ): FurniturePartDef {
   const merged = mergeBufferGeometries(geos);
   geos.forEach((g) => g.dispose());
-  if (role !== 'tvArt' && role !== 'ideScreen') {
+  if (role !== 'tvArt' && role !== 'printArt' && role !== 'ideScreen') {
     const uvSize =
       role === 'wood' || role === 'walnut' || role === 'oak'
         ? TEX_INCHES.walnut

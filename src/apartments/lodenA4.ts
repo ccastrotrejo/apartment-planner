@@ -176,6 +176,7 @@ export const LODEN_A4_SPEC: ApartmentSpec = {
     ['queen-bed', 201.2, 62.9, -90],
     ['nightstand', 233.85, 22.2, -90],
     ['nightstand', 233.85, 103.6, -90],
+    ['gallery-prints', 241.0, 62.9, -90],
     ['bike-black', 142.8, 84, 90],
     ['shoe-cabinet', 67.5, 367.5, 90],
     ['coat-rack', 117, 236, 0],

@@ -26,6 +26,7 @@ pnpm run dev      # http://127.0.0.1:8765/
 ### URL parameters
 
 - `?shot=1..6` — composed showcase cameras (overview, living, bedroom, kitchen, bath, window eye-level); `?cam=px,py,pz,tx,ty,tz` for an exact pose
+- `?mood=evening` — warm evening lighting
 - `?preset=low` — skip AO/bloom/SMAA/soft shadows for slower GPUs
 - `?tm=neutral|agx|aces` and `?hdri=kloofendal_48d_partly_cloudy_puresky|lebombo` — tone mapping and environment A/B
 
@@ -33,6 +34,7 @@ pnpm run dev      # http://127.0.0.1:8765/
 
 - **Realistic 3D architecture & PBR materials:** Procedural albedo, bump, and roughness textures for European white-oak planks, concrete-look porcelain floor and wall tiles with recessed matte grout, veined Calacatta quartz countertops, rift-oak cabinetry, brushed stainless appliances, woven bouclé/linen upholstery, flatweave wool rugs, rattan cane webbing, clearcoat glazed porcelain, honed stone window sills, black aluminum mullions, door casings/headers, and `N8AO` ambient occlusion.
 - **Image-based lighting & post:** CC0 Poly Haven HDRI environment, PCSS contact-hardening shadows, walls that shade window light, warm-tinted `N8AO`, HDR bloom on practicals, Khronos PBR Neutral tone mapping, vignette, and SMAA. A CC0 photoscanned oak floor streams in at true physical scale (procedural textures remain the offline fallback). Asset licenses: [docs/ASSETS.md](docs/ASSETS.md).
+- **Day / Evening lighting:** Evening switches off the sun and turns on 2700 K shadowed recessed downlights in every room, warm floor lamps, 3000 K under-cabinet task light and the vanity, with glowing shades and warm bounce (`?mood=evening`). Research and design notes: [docs/LIGHTING.md](docs/LIGHTING.md).
 - **Path-traced photo mode:** the ◉ stage button progressively path-traces the current 3D view (`three-gpu-pathtracer`) with global illumination and soft area shadows; save the result as a PNG.
 - **Keyboard navigation:** `W A S D` (and the arrow keys when no unlocked piece is selected) glide the view relative to where the camera faces, in 3D and Plan; hold `Shift` to move faster.
 - **Motion:** damped orbit/pan, eased zoom and fit-view, a 2″ spring lift while dragging, and a short settle when pieces are added — all disabled under `prefers-reduced-motion`. Keyboard nudges stay instant.

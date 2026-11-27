@@ -5,3 +5,5 @@ dist/
 output/
 __pycache__/
 qa/
+.vercel
+.env*

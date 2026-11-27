@@ -13,7 +13,6 @@ import {
 } from './furnitureBedroomEntry';
 import {
   buildCoffeeTable,
-  buildCounterStool,
   buildOfficeChair,
   buildSectional,
   buildStandingDesk,
@@ -36,7 +35,6 @@ const FURNITURE_BUILDERS: Readonly<Record<string, () => FurniturePartDef[]>> = {
   'torchiere-lamp': buildTorchiere,
   'standing-desk': buildStandingDesk,
   'office-chair': buildOfficeChair,
-  'counter-stool': buildCounterStool,
   'queen-bed': buildQueenBed,
   nightstand: buildNightstand,
   'tripod-lamp': buildTripodLamp,

@@ -11,6 +11,7 @@ import { sizeRectForSpec } from '../layout/collision';
 import { getFurnitureParts, getPartPlanEdges, getSoftContactShadowTexture } from './furnitureGeometries';
 import { createRoleMaterial } from './materials';
 import type { Clearances, EvaluatedItem } from '../types';
+import { kelvinToColor, WARM_WHITE_K, type LightingMood } from './lightColor';
 
 export const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
   item,
@@ -18,10 +19,12 @@ export const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
   darkTheme,
   registerGroup,
   onPiecePointerDown,
+  mood,
 }: {
   item: EvaluatedItem;
   view: '3d' | 'plan';
   darkTheme: boolean;
+  mood: LightingMood;
   registerGroup: (id: number, node: THREE.Group | null) => void;
   onPiecePointerDown: (e: ThreeEvent<PointerEvent>, item: EvaluatedItem) => void;
 }) {
@@ -39,12 +42,14 @@ export const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
       if (p.role === 'bulb' || p.role === 'shade') {
         if (item.bad || item.warn) m.emissive.setHex(hex);
         else m.emissive.setHex(p.role === 'bulb' ? 0xffdfad : 0xffe8c2);
+        const night = mood === 'evening';
+        m.emissiveIntensity = p.role === 'bulb' ? (night ? 4.0 : 1.6) : night ? 1.15 : 0.28;
       } else {
         m.emissive.setHex(hex);
         m.emissiveIntensity = item.bad || item.warn ? 0.55 : 0;
       }
     });
-  }, [item.bad, item.warn, materials, parts]);
+  }, [item.bad, item.warn, materials, parts, mood]);
 
   useEffect(() => {
     return () => {
@@ -64,6 +69,7 @@ export const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
   );
 
   const shadowTex = useMemo(() => getSoftContactShadowTexture(), []);
+  const warmWhite = useMemo(() => kelvinToColor(WARM_WHITE_K), []);
   const showContactShadow = view === '3d' && !spec.flat && !spec.minY && shadowTex !== null;
   const hitRects = spec.hits ?? [spec.hit];
 
@@ -90,10 +96,22 @@ export const FurnitureItemMesh = React.memo(function FurnitureItemMesh({
 
       {/* Practical warm 2700K light pool emitted by floor lamps (moves live when dragged!) */}
       {view === '3d' && item.k === 'torchiere-lamp' && (
-        <pointLight position={[0, 66, 0]} color={0xffe3b8} intensity={210} distance={115} decay={2} />
+        <pointLight
+          position={[0, 66, 0]}
+          color={warmWhite}
+          intensity={mood === 'evening' ? 2600 : 210}
+          distance={mood === 'evening' ? 150 : 115}
+          decay={2}
+        />
       )}
       {view === '3d' && item.k === 'tripod-lamp' && (
-        <pointLight position={[0, 54, 0]} color={0xffdfad} intensity={190} distance={105} decay={2} />
+        <pointLight
+          position={[0, 54, 0]}
+          color={warmWhite}
+          intensity={mood === 'evening' ? 2200 : 190}
+          distance={mood === 'evening' ? 130 : 105}
+          decay={2}
+        />
       )}
 
       {parts.map((p, idx) => {

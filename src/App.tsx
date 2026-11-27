@@ -6,6 +6,7 @@ import { FURNITURE_CATALOG } from './furniture/catalog';
 import { computeClearances, evaluateLayout } from './layout/collision';
 import { ApartmentScene, type StageHandle } from './scene/ApartmentScene';
 import type { PhotoModeApi } from './scene/PathTracedPhoto';
+import { moodFromQuery, type LightingMood } from './scene/lightColor';
 import { renderFurnitureThumbnails } from './scene/furnitureGeometries';
 import { createEmptyOverlayRefs } from './scene/overlayRefs';
 import type { Compass, PlacedItem, PlacementTuple, SavedLayout } from './types';
@@ -73,6 +74,7 @@ export function App() {
   const [seeThrough, setSeeThrough] = useState(true);
   const [locked, setLocked] = useState(true);
   const [photoMode, setPhotoMode] = useState(false);
+  const [mood, setMood] = useState<LightingMood>(() => moodFromQuery(window.location.search));
   const photoStatusRef = useRef<HTMLSpanElement | null>(null);
   const photoApiRef = useRef<PhotoModeApi | null>(null);
   const [libCollapsed, setLibCollapsed] = useState<boolean>(() => {
@@ -407,6 +409,27 @@ export function App() {
             </button>
           </div>
 
+          {view === '3d' && (
+            <div className={styles.seg} role="group" aria-label="Lighting">
+              <button
+                type="button"
+                aria-pressed={mood === 'day'}
+                title="Daylight through the windows"
+                onClick={() => setMood('day')}
+              >
+                Day
+              </button>
+              <button
+                type="button"
+                aria-pressed={mood === 'evening'}
+                title="Evening: warm 2700 K downlights, lamps and under-cabinet lights"
+                onClick={() => setMood('evening')}
+              >
+                Evening
+              </button>
+            </div>
+          )}
+
           <div className={styles.seg} role="group" aria-label="Wall height">
             <button
               type="button"
@@ -614,6 +637,7 @@ export function App() {
             onDropPieceAt={addPieceAt}
             onCanvasKeyDown={handleCanvasKeyDown}
             photoMode={photoMode}
+            mood={mood}
             photoStatusRef={photoStatusRef}
             photoApiRef={photoApiRef}
           />

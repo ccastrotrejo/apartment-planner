@@ -10,6 +10,12 @@ import { ApartmentArchitecture, EnvironmentAndLighting } from './ApartmentArchit
 import type { OverlayDomRefs } from './overlayRefs';
 import { renderSettingsFromQuery } from './renderSettings';
 import { prefersReducedMotion } from './motion';
+import type { PhotoModeApi } from './PathTracedPhoto';
+
+// three-gpu-pathtracer is ~200 kB; only fetch it when photo mode is first opened.
+const PathTracedPhoto = React.lazy(() =>
+  import('./PathTracedPhoto').then((m) => ({ default: m.PathTracedPhoto })),
+);
 import { FLOOR_PLANE, SceneController, type StageHandle } from './SceneController';
 import { FurnitureItemMesh, SelectionAndDimensionLines } from './SceneFurniture';
 
@@ -35,6 +41,9 @@ export interface ApartmentSceneProps {
   readonly onTransformItem: (id: number) => void;
   readonly onDropPieceAt: (pieceKey: string, x: number, z: number) => void;
   readonly onCanvasKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  readonly photoMode: boolean;
+  readonly photoStatusRef: React.RefObject<HTMLElement | null>;
+  readonly photoApiRef: React.MutableRefObject<PhotoModeApi | null>;
 }
 
 
@@ -59,7 +68,11 @@ export function ApartmentScene(props: ApartmentSceneProps) {
     onTransformItem,
     onDropPieceAt,
     onCanvasKeyDown,
+    photoMode,
+    photoStatusRef,
+    photoApiRef,
   } = props;
+  const tracing = photoMode && view === '3d';
 
   const settings = useMemo(() => renderSettingsFromQuery(window.location.search), []);
   const highQuality = settings.preset === 'high';
@@ -233,7 +246,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
           onTransformItem={onTransformItem}
         />
 
-        {view === '3d' && highQuality && (
+        {view === '3d' && !tracing && highQuality && (
           <EffectComposer enableNormalPass={false} multisampling={0}>
             <N8AO
               aoRadius={14}
@@ -243,16 +256,21 @@ export function ApartmentScene(props: ApartmentSceneProps) {
               quality="medium"
               halfRes
             />
-            <Bloom mipmapBlur luminanceThreshold={0.92} luminanceSmoothing={0.12} intensity={0.55} radius={0.62} />
+            <Bloom mipmapBlur luminanceThreshold={1.05} luminanceSmoothing={0.1} intensity={0.55} radius={0.62} />
             <ToneMapping mode={toneMapMode} />
             <Vignette offset={0.32} darkness={0.38} />
             <SMAA />
           </EffectComposer>
         )}
-        {view === '3d' && !highQuality && (
+        {view === '3d' && !tracing && !highQuality && (
           <EffectComposer enableNormalPass={false} multisampling={0}>
             <ToneMapping mode={toneMapMode} />
           </EffectComposer>
+        )}
+        {tracing && (
+          <React.Suspense fallback={null}>
+            <PathTracedPhoto statusRef={photoStatusRef} apiRef={photoApiRef} />
+          </React.Suspense>
         )}
       </Canvas>
     </div>

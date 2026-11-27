@@ -56,7 +56,8 @@ export function EnvironmentAndLighting({
         }
         hdr.mapping = THREE.EquirectangularReflectionMapping;
         const next = pmrem.fromEquirectangular(hdr);
-        hdr.dispose();
+        // The path tracer samples the raw equirect HDR (it can't read PMREM cube UVs).
+        (scene.userData as { equirectEnv?: THREE.Texture }).equirectEnv = hdr;
         pmrem.dispose();
         target.dispose();
         target = next;
@@ -74,6 +75,9 @@ export function EnvironmentAndLighting({
       disposed = true;
       scene.environment = null;
       target.dispose();
+      const ud = scene.userData as { equirectEnv?: THREE.Texture };
+      ud.equirectEnv?.dispose();
+      ud.equirectEnv = undefined;
     };
   }, [gl, scene, invalidate, settings.hdri]);
 

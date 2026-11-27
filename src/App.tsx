@@ -5,6 +5,7 @@ import { SelectionCard } from './components/SelectionCard';
 import { FURNITURE_CATALOG } from './furniture/catalog';
 import { computeClearances, evaluateLayout } from './layout/collision';
 import { ApartmentScene, type StageHandle } from './scene/ApartmentScene';
+import type { PhotoModeApi } from './scene/PathTracedPhoto';
 import { renderFurnitureThumbnails } from './scene/furnitureGeometries';
 import { createEmptyOverlayRefs } from './scene/overlayRefs';
 import type { Compass, PlacedItem, PlacementTuple, SavedLayout } from './types';
@@ -71,6 +72,9 @@ export function App() {
   const [fullWalls, setFullWalls] = useState(true);
   const [seeThrough, setSeeThrough] = useState(true);
   const [locked, setLocked] = useState(true);
+  const [photoMode, setPhotoMode] = useState(false);
+  const photoStatusRef = useRef<HTMLSpanElement | null>(null);
+  const photoApiRef = useRef<PhotoModeApi | null>(null);
   const [libCollapsed, setLibCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(LS_LIB_COLLAPSED) === '1';
@@ -609,6 +613,9 @@ export function App() {
             onTransformItem={transformItem}
             onDropPieceAt={addPieceAt}
             onCanvasKeyDown={handleCanvasKeyDown}
+            photoMode={photoMode}
+            photoStatusRef={photoStatusRef}
+            photoApiRef={photoApiRef}
           />
 
           {/* Projected room labels, clearance callouts, and selection tag (GPU translate3d via direct refs) */}
@@ -681,9 +688,47 @@ export function App() {
             >
               ⤢
             </button>
+            {view === '3d' && (
+              <button
+                className={styles.btn}
+                type="button"
+                aria-label={photoMode ? 'Exit path-traced photo mode' : 'Render path-traced photo'}
+                aria-pressed={photoMode}
+                title="Path-traced photo"
+                onClick={() => {
+                  setSelectedId(null);
+                  setPhotoMode((on) => !on);
+                }}
+              >
+                ◉
+              </button>
+            )}
           </div>
 
-          {!selectedItem && <div className={styles.hint}>{hintText}</div>}
+          {photoMode && view === '3d' && (
+            <div className={styles.photoBar} role="status">
+              <span ref={photoStatusRef}>Path tracing…</span>
+              <button
+                className={styles.btn}
+                type="button"
+                onClick={() => {
+                  const url = photoApiRef.current?.capture();
+                  if (!url) return;
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'apartment-photo.png';
+                  a.click();
+                }}
+              >
+                Save PNG
+              </button>
+              <button className={styles.btn} type="button" onClick={() => setPhotoMode(false)}>
+                Exit
+              </button>
+            </div>
+          )}
+
+          {!selectedItem && !(photoMode && view === '3d') && <div className={styles.hint}>{hintText}</div>}
 
           {selectedItem && (
             <SelectionCard

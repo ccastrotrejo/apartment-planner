@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FURNITURE_CATALOG } from '../furniture/catalog';
-import { rbox, cushion, cylY, strut, tubePath, makePart, type FurniturePartDef } from './furniturePrimitives';
+import { rbox, cushion, cushionTopY, cylY, strut, tubePath, makePart, type FurniturePartDef } from './furniturePrimitives';
 
 export function buildSectional(): FurniturePartDef[] {
   const c = FURNITURE_CATALOG.sectional.colors;
@@ -15,10 +15,14 @@ export function buildSectional(): FurniturePartDef[] {
   uph.push(rbox(-50, lh + 1.0, -32, 50, 30.2, -26.5, 1.15));
   uph.push(rbox(44, lh, -32, 50, 24.0, 6, 1.2));
 
-  // Plump individual crowned seat cushions (chaise + two sofa seats)
-  uph.push(cushion(-49.8, lh + 4.1, -25.5, -17.15, sh, 32, 1.55, 0.55));
-  uph.push(cushion(-16.85, lh + 4.1, -25.5, 13.4, sh, 6, 1.55, 0.55));
-  uph.push(cushion(13.7, lh + 4.1, -25.5, 44.0, sh, 6, 1.55, 0.55));
+  // Plump individual crowned seat cushions (chaise + two sofa seats): [x0, z0, x1, z1]
+  const seatCrown = 0.55;
+  const seats: Array<[number, number, number, number]> = [
+    [-49.8, -25.5, -17.15, 32],
+    [-16.85, -25.5, 13.4, 6],
+    [13.7, -25.5, 44.0, 6],
+  ];
+  for (const [sx0, sz0, sx1, sz1] of seats) uph.push(cushion(sx0, lh + 4.1, sz0, sx1, sh, sz1, 1.55, seatCrown));
 
   // Subtle upholstered tuft buttons along the seats
   const buttonProto = new THREE.SphereGeometry(0.38, 10, 8);
@@ -26,8 +30,10 @@ export function buildSectional(): FurniturePartDef[] {
   for (const bx of [-41.5, -33.5, -25.5, -9, -1.5, 6, 21.5, 29, 36.5]) {
     for (const bz of [-18, -9, 0, 9, 18, 25]) {
       if (bz <= 1.5 || bx < -18) {
+        const seat = seats.find(([sx0, sz0, sx1, sz1]) => bx > sx0 && bx < sx1 && bz > sz0 && bz < sz1);
+        if (!seat) continue;
         const btn = buttonProto.clone();
-        btn.translate(bx, sh + 0.12, bz);
+        btn.translate(bx, cushionTopY(...seat, sh, seatCrown, bx, bz) + 0.02, bz);
         uph.push(btn);
       }
     }

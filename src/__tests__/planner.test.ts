@@ -13,6 +13,9 @@ import { getFurnitureParts } from '../scene/furnitureGeometries';
 import { diffRegions, rectsToRegion, regionArea } from '../geometry/plan2d';
 import { decodeLayoutCode, encodeLayoutCode, ft, sanitizeSavedLayouts } from '../utils/units';
 import type { PlacementTuple } from '../types';
+import { shotFromQuery } from '../scene/shots';
+import { renderSettingsFromQuery } from '../scene/renderSettings';
+import { easeOutUi } from '../scene/motion';
 
 describe('Residence A4 floor-plan solver & circulation', () => {
   const plan = solveApartmentPlan(LODEN_A4_SPEC);
@@ -172,5 +175,53 @@ describe('Plan region booleans', () => {
     const hole = rectsToRegion([[4, 4, 6, 6]]);
     expect(regionArea(diffRegions(outer, hole))).toBeCloseTo(96, 6);
     expect(regionArea(rectsToRegion([[0, 0, 2, 2]], 1))).toBeCloseTo(16, 6);
+  });
+});
+
+describe('showcase camera shots', () => {
+  const plan = solveApartmentPlan(LODEN_A4_SPEC);
+
+  it('resolves ?shot=N to a composed viewpoint inside the plan footprint', () => {
+    const shot = shotFromQuery('?shot=2', plan);
+    expect(shot?.name).toBe('living');
+    const [x0, z0, x1, z1] = plan.bounds;
+    const [tx, , tz] = shot!.target;
+    expect(tx).toBeGreaterThan(x0);
+    expect(tx).toBeLessThan(x1);
+    expect(tz).toBeGreaterThan(z0);
+    expect(tz).toBeLessThan(z1);
+  });
+
+  it('prefers an explicit ?cam= pose and rejects malformed or out-of-range input', () => {
+    expect(shotFromQuery('?shot=1&cam=1,2,3,4,5,6', plan)).toMatchObject({
+      position: [1, 2, 3],
+      target: [4, 5, 6],
+    });
+    expect(shotFromQuery('?cam=1,2,x,4,5,6', plan)).toBeNull();
+    expect(shotFromQuery('?shot=0', plan)).toBeNull();
+    expect(shotFromQuery('?shot=99', plan)).toBeNull();
+  });
+});
+
+describe('render settings and motion easing', () => {
+  it('falls back to safe defaults for unknown query values', () => {
+    expect(renderSettingsFromQuery('?preset=ultra&hdri=../../etc&tm=foo')).toEqual({
+      preset: 'high',
+      hdri: 'kloofendal_48d_partly_cloudy_puresky',
+      toneMap: 'neutral',
+    });
+    expect(renderSettingsFromQuery('?preset=low&tm=agx').preset).toBe('low');
+  });
+
+  it('eases monotonically from 0 to 1 with a fast start', () => {
+    expect(easeOutUi(0)).toBe(0);
+    expect(easeOutUi(1)).toBe(1);
+    expect(easeOutUi(0.25)).toBeGreaterThan(0.5);
+    let prev = 0;
+    for (let t = 0.05; t <= 1; t += 0.05) {
+      const v = easeOutUi(t);
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
   });
 });

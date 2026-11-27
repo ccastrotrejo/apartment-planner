@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { Canvas, type ThreeEvent } from '@react-three/fiber';
-import { EffectComposer, N8AO, ToneMapping } from '@react-three/postprocessing';
+import { Bloom, EffectComposer, N8AO, SMAA, ToneMapping, Vignette } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 
@@ -8,6 +8,8 @@ import { FURNITURE_CATALOG } from '../furniture/catalog';
 import type { Clearances, EvaluatedItem, SolvedPlan } from '../types';
 import { ApartmentArchitecture, EnvironmentAndLighting } from './ApartmentArchitecture';
 import type { OverlayDomRefs } from './overlayRefs';
+import { renderSettingsFromQuery } from './renderSettings';
+import { prefersReducedMotion } from './motion';
 import { FLOOR_PLANE, SceneController, type StageHandle } from './SceneController';
 import { FurnitureItemMesh, SelectionAndDimensionLines } from './SceneFurniture';
 
@@ -59,11 +61,35 @@ export function ApartmentScene(props: ApartmentSceneProps) {
     onCanvasKeyDown,
   } = props;
 
+  const settings = useMemo(() => renderSettingsFromQuery(window.location.search), []);
+  const highQuality = settings.preset === 'high';
+  const toneMapMode = {
+    neutral: ToneMappingMode.NEUTRAL,
+    agx: ToneMappingMode.AGX,
+    aces: ToneMappingMode.ACES_FILMIC,
+  }[settings.toneMap];
+
   const itemGroupsRef = useRef<Map<number, THREE.Group>>(new Map());
-  const registerGroup = React.useCallback((id: number, node: THREE.Group | null) => {
-    if (node) itemGroupsRef.current.set(id, node);
-    else itemGroupsRef.current.delete(id);
-  }, []);
+  // Pieces that appear after the first paint (dropped in, layout switch) get a short settle;
+  // pieces present on page load don't animate.
+  const seenIdsRef = useRef<Set<number>>(new Set());
+  const stageStartRef = useRef(performance.now());
+  const reducedMotion = useMemo(() => prefersReducedMotion(), []);
+  const registerGroup = React.useCallback(
+    (id: number, node: THREE.Group | null) => {
+      if (!node) {
+        itemGroupsRef.current.delete(id);
+        return;
+      }
+      itemGroupsRef.current.set(id, node);
+      if (seenIdsRef.current.has(id)) return;
+      seenIdsRef.current.add(id);
+      if (!reducedMotion && performance.now() - stageStartRef.current > 1500) {
+        node.userData.spawnAt = performance.now();
+      }
+    },
+    [reducedMotion],
+  );
 
   const dragStateRef = useRef<{
     id: number;
@@ -160,6 +186,7 @@ export function ApartmentScene(props: ApartmentSceneProps) {
           view={view}
           darkTheme={darkTheme}
           shadowTrigger={shadowTrigger}
+          settings={settings}
         />
         <ApartmentArchitecture
           plan={plan}
@@ -206,16 +233,25 @@ export function ApartmentScene(props: ApartmentSceneProps) {
           onTransformItem={onTransformItem}
         />
 
-        {view === '3d' && (
+        {view === '3d' && highQuality && (
           <EffectComposer enableNormalPass={false} multisampling={0}>
             <N8AO
-              aoRadius={12}
-              distanceFalloff={0.9}
-              intensity={1.5}
+              aoRadius={14}
+              distanceFalloff={0.85}
+              intensity={2.1}
+              color="#2a1d12"
               quality="medium"
               halfRes
             />
-            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+            <Bloom mipmapBlur luminanceThreshold={0.92} luminanceSmoothing={0.12} intensity={0.55} radius={0.62} />
+            <ToneMapping mode={toneMapMode} />
+            <Vignette offset={0.32} darkness={0.38} />
+            <SMAA />
+          </EffectComposer>
+        )}
+        {view === '3d' && !highQuality && (
+          <EffectComposer enableNormalPass={false} multisampling={0}>
+            <ToneMapping mode={toneMapMode} />
           </EffectComposer>
         )}
       </Canvas>

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
+import { SoftShadows } from '@react-three/drei';
 
 import {
   buildApartmentGeometrySet,
@@ -9,18 +11,23 @@ import {
   type FixtureBucketKey,
 } from './apartmentGeometries';
 import { createApartmentMaterials } from './materials';
+import { applyPhotoscan, PHOTOSCANS } from './photoscanTextures';
+import { TEX_INCHES } from './textures';
 import type { SolvedPlan } from '../types';
+import { hdriUrl, type RenderSettings } from './renderSettings';
 
 export function EnvironmentAndLighting({
   plan,
   view,
   darkTheme,
   shadowTrigger,
+  settings,
 }: {
   plan: SolvedPlan;
   view: '3d' | 'plan';
   darkTheme: boolean;
   shadowTrigger: unknown;
+  settings: RenderSettings;
 }) {
   const { gl, scene, invalidate } = useThree();
   const [x0, z0, x1, z1] = plan.bounds;
@@ -32,16 +39,43 @@ export function EnvironmentAndLighting({
     // Freeze per-frame shadow-map regeneration: sun is static, so orbiting needs 0 shadow passes!
     gl.shadowMap.autoUpdate = false;
     gl.shadowMap.needsUpdate = true;
+    // Neutral procedural room IBL first, then swap in the CC0 HDRI once it has streamed in.
     const pmrem = new THREE.PMREMGenerator(gl);
-    const target = pmrem.fromScene(new RoomEnvironment(), 0.04);
+    let target = pmrem.fromScene(new RoomEnvironment(), 0.04);
     scene.environment = target.texture;
-    pmrem.dispose();
+    scene.environmentIntensity = 1;
     invalidate();
+    let disposed = false;
+    new HDRLoader().load(
+      hdriUrl(settings.hdri),
+      (hdr) => {
+        if (disposed) {
+          hdr.dispose();
+          pmrem.dispose();
+          return;
+        }
+        hdr.mapping = THREE.EquirectangularReflectionMapping;
+        const next = pmrem.fromEquirectangular(hdr);
+        hdr.dispose();
+        pmrem.dispose();
+        target.dispose();
+        target = next;
+        scene.environment = next.texture;
+        scene.environmentIntensity = 0.85;
+        invalidate();
+      },
+      undefined,
+      () => {
+        // Keep the procedural RoomEnvironment if the HDRI can't be fetched (offline, file://).
+        pmrem.dispose();
+      },
+    );
     return () => {
+      disposed = true;
       scene.environment = null;
       target.dispose();
     };
-  }, [gl, scene, invalidate]);
+  }, [gl, scene, invalidate, settings.hdri]);
 
   // Refresh static shadow map only when geometry, furniture positions, or wall cuts change
   useEffect(() => {
@@ -75,13 +109,15 @@ export function EnvironmentAndLighting({
   return (
     <>
       <primitive object={sunTarget} />
-      <hemisphereLight args={[0xfffaf2, 0x8a8377, view === 'plan' ? 0.72 : 0.42]} />
+      {/* PCSS contact-hardening shadows: sharp at the foot of a piece, soft further away */}
+      {view === '3d' && settings.preset === 'high' && <SoftShadows size={18} samples={12} focus={0.4} />}
+      <hemisphereLight args={[0xfff6ea, 0x9a8a74, view === 'plan' ? 0.72 : 0.26]} />
       {/* Warm natural sun casting crisp grounded soft shadows */}
       <directionalLight
         position={[cx - 165, 410, cz - 235]}
         target={sunTarget}
-        intensity={view === 'plan' ? 0.52 : 1.32}
-        color={0xfff2df}
+        intensity={view === 'plan' ? 0.52 : 2.1}
+        color={0xffe9cf}
         castShadow={view === '3d'}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -101,8 +137,8 @@ export function EnvironmentAndLighting({
           <directionalLight
             position={[cx - 240, 140, cz - 310]}
             target={sunTarget}
-            intensity={0.46}
-            color={0xd8ecff}
+            intensity={0.34}
+            color={0xcfe3ff}
           />
           {/* Kitchen under-cabinet LED task pools */}
           <pointLight position={[48, 51, 224]} color={0xffe2b4} intensity={160} distance={78} decay={2} />
@@ -135,6 +171,13 @@ export const ApartmentArchitecture = React.memo(function ApartmentArchitecture({
 }) {
   const geoSet = useMemo(() => buildApartmentGeometrySet(plan), [plan]);
   const mats = useMemo(() => createApartmentMaterials(), []);
+  const invalidate = useThree((st) => st.invalidate);
+
+  // Swap the procedural oak for a CC0 photoscan once it has streamed in.
+  useEffect(
+    () => applyPhotoscan(mats.floorWood, PHOTOSCANS.oakFloor, TEX_INCHES.planks, invalidate),
+    [mats, invalidate],
+  );
 
   const planEdgeGeoCache = useMemo(() => {
     const out: Array<{ key: FixtureBucketKey; edges: THREE.EdgesGeometry; upper: boolean }> = [];
@@ -283,7 +326,7 @@ export const ApartmentArchitecture = React.memo(function ApartmentArchitecture({
         geometry={fullWalls ? geoSet.wallFull : geoSet.wallLow}
         material={mats.wall}
         receiveShadow
-        castShadow={!seeThrough && view === '3d'}
+        castShadow={view === '3d'}
       />
       <mesh geometry={geoSet.sillCaps} material={mats.sill} receiveShadow />
       {view !== 'plan' && <mesh geometry={geoSet.baseboard} material={mats.baseboard} receiveShadow />}

@@ -168,6 +168,7 @@ export type MaterialRole =
   | 'paint'
   | 'screen'
   | 'tvArt'
+  | 'printArt'
   | 'ideScreen'
   | 'bezel'
   | 'mirror'

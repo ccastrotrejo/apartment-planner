@@ -7,6 +7,26 @@ import { FURNITURE_CATALOG } from '../furniture/catalog';
 import { transformHitCorners } from '../geometry/plan2d';
 import { sizeRectForSpec } from '../layout/collision';
 import type { OverlayDomRefs } from './overlayRefs';
+import { shotFromQuery } from './shots';
+import { MOTION_MS, damp, easeInOutUi, easeOutUi, prefersReducedMotion } from './motion';
+import { isTypingTarget, panIntent, panKeyFor } from './keyboardPan';
+
+interface CameraTween {
+  readonly start: number;
+  readonly duration: number;
+  readonly fromPos: THREE.Vector3;
+  readonly toPos: THREE.Vector3;
+  readonly fromTarget: THREE.Vector3;
+  readonly toTarget: THREE.Vector3;
+  readonly fromZoom: number;
+  readonly toZoom: number;
+  readonly ease: (t: number) => number;
+  readonly cam: THREE.PerspectiveCamera | THREE.OrthographicCamera;
+  readonly controls: { target: THREE.Vector3; update: () => void };
+}
+
+/** Pieces rise this far (inches) while dragged so they read as picked up. */
+const DRAG_LIFT_IN = 2;
 import type { Clearances, Compass, EvaluatedItem, SolvedPlan } from '../types';
 import { fmtFtIn } from '../utils/units';
 
@@ -25,6 +45,7 @@ export function SceneController({
   selectedId,
   clearances,
   view,
+  locked,
   compactClass,
   tinyClass,
   overlayRefs,
@@ -40,6 +61,7 @@ export function SceneController({
   selectedId: number | null;
   clearances: Clearances;
   view: '3d' | 'plan';
+  locked: boolean;
   compactClass: string;
   tinyClass: string;
   overlayRefs: React.MutableRefObject<OverlayDomRefs>;
@@ -101,6 +123,9 @@ export function SceneController({
     invalidate();
   }, [view, items, selectedId, clearances, invalidate]);
 
+  // Composed showcase viewpoint from ?shot=N / ?cam=... (initial camera only)
+  const initialShot = useMemo(() => shotFromQuery(window.location.search, plan), [plan]);
+
   const activeCamera = () => (view === 'plan' ? orthoCamRef.current : perspCamRef.current);
   const activeControls = () => (view === 'plan' ? controlsPlanRef.current : controls3dRef.current);
 
@@ -117,38 +142,219 @@ export function SceneController({
     return raycaster.ray.intersectPlane(FLOOR_PLANE, hit) ? [hit.x, hit.z] : null;
   };
 
+  const reducedMotion = useMemo(() => prefersReducedMotion(), []);
+  const cameraTweenRef = useRef<CameraTween | null>(null);
+
+  /** Ease the camera (and orbit target / ortho zoom) to a new pose; snaps when reduced motion is on. */
+  const startCameraTween = (
+    cam: THREE.PerspectiveCamera | THREE.OrthographicCamera,
+    controls: { target: THREE.Vector3; update: () => void },
+    toPos: THREE.Vector3,
+    toTarget: THREE.Vector3,
+    toZoom: number,
+    duration: number,
+    ease: (t: number) => number,
+  ) => {
+    // Retarget from wherever an in-flight tween currently is, so repeated clicks stay smooth.
+    cameraTweenRef.current = {
+      start: performance.now(),
+      duration: reducedMotion ? 0 : duration,
+      fromPos: cam.position.clone(),
+      toPos: toPos.clone(),
+      fromTarget: controls.target.clone(),
+      toTarget: toTarget.clone(),
+      fromZoom: cam.zoom,
+      toZoom,
+      ease,
+      cam,
+      controls,
+    };
+    invalidate();
+  };
+
   const fitView = () => {
     if (orthoCamRef.current && controlsPlanRef.current) {
-      orthoCamRef.current.left = -initHalfH * aspect;
-      orthoCamRef.current.right = initHalfH * aspect;
-      orthoCamRef.current.top = initHalfH;
-      orthoCamRef.current.bottom = -initHalfH;
-      orthoCamRef.current.zoom = 1;
-      orthoCamRef.current.position.set(cx, 1500, cz);
-      orthoCamRef.current.lookAt(cx, 0, cz);
-      orthoCamRef.current.updateProjectionMatrix();
-      controlsPlanRef.current.target.set(cx, 0, cz);
-      controlsPlanRef.current.update();
+      const cam = orthoCamRef.current;
+      cam.left = -initHalfH * aspect;
+      cam.right = initHalfH * aspect;
+      cam.top = initHalfH;
+      cam.bottom = -initHalfH;
+      cam.updateProjectionMatrix();
+      if (view === 'plan') {
+        startCameraTween(cam, controlsPlanRef.current, new THREE.Vector3(cx, 1500, cz), new THREE.Vector3(cx, 0, cz), 1, MOTION_MS.cameraFit, easeInOutUi);
+      } else {
+        cam.zoom = 1;
+        cam.position.set(cx, 1500, cz);
+        cam.updateProjectionMatrix();
+        controlsPlanRef.current.target.set(cx, 0, cz);
+        controlsPlanRef.current.update();
+      }
     }
     if (perspCamRef.current && controls3dRef.current) {
-      perspCamRef.current.position.set(cx + initDist * 0.25, initDist * 0.76, cz + initDist * 0.72);
-      controls3dRef.current.target.set(cx, 0, cz);
-      controls3dRef.current.update();
+      const toPos = new THREE.Vector3(cx + initDist * 0.25, initDist * 0.76, cz + initDist * 0.72);
+      const toTarget = new THREE.Vector3(cx, 0, cz);
+      if (view === '3d') {
+        startCameraTween(perspCamRef.current, controls3dRef.current, toPos, toTarget, 1, MOTION_MS.cameraFit, easeInOutUi);
+      } else {
+        perspCamRef.current.position.copy(toPos);
+        controls3dRef.current.target.copy(toTarget);
+        controls3dRef.current.update();
+      }
     }
     invalidate();
   };
 
+  // WASD / arrow-key panning, relative to where the camera faces. Arrows stay with piece nudging
+  // while a piece is selected and furniture is unlocked.
+  const heldKeysRef = useRef<Set<string>>(new Set());
+  const fastRef = useRef(false);
+  const panVelRef = useRef(new THREE.Vector2());
+  const arrowsNudgePiece = !locked && selectedId !== null;
+  useEffect(() => {
+    const held = heldKeysRef.current;
+    const onDown = (e: KeyboardEvent) => {
+      fastRef.current = e.shiftKey;
+      if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+      const k = panKeyFor(e.key, arrowsNudgePiece);
+      if (!k) return;
+      e.preventDefault();
+      cameraTweenRef.current = null;
+      held.add(k);
+      invalidate();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      fastRef.current = e.shiftKey;
+      held.delete(e.key.toLowerCase());
+    };
+    const clear = () => held.clear();
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', clear);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', clear);
+    };
+  }, [arrowsNudgePiece, invalidate]);
+
+  // Arrow keys switching to piece nudging must not leave a stale held arrow behind.
+  useEffect(() => {
+    if (!arrowsNudgePiece) return;
+    for (const k of [...heldKeysRef.current]) if (k.startsWith('arrow')) heldKeysRef.current.delete(k);
+  }, [arrowsNudgePiece]);
+
+  const panRight = useMemo(() => new THREE.Vector3(), []);
+  const panForward = useMemo(() => new THREE.Vector3(), []);
+  const panStep = useMemo(() => new THREE.Vector3(), []);
+
+  // Camera tweens + piece lift/settle springs. Only requests frames while something is moving.
+  const itemYById = useMemo(() => new Map(items.map((i) => [i.id, i.y])), [items]);
+  useFrame((_, delta) => {
+    let active = false;
+    const tw = cameraTweenRef.current;
+    if (tw) {
+      const t = tw.duration > 0 ? Math.min(1, (performance.now() - tw.start) / tw.duration) : 1;
+      const k = tw.ease(t);
+      tw.cam.position.lerpVectors(tw.fromPos, tw.toPos, k);
+      tw.controls.target.lerpVectors(tw.fromTarget, tw.toTarget, k);
+      if (tw.fromZoom !== tw.toZoom) {
+        tw.cam.zoom = tw.fromZoom + (tw.toZoom - tw.fromZoom) * k;
+        tw.cam.updateProjectionMatrix();
+      }
+      tw.controls.update();
+      if (t >= 1) cameraTweenRef.current = null;
+      else active = true;
+    }
+
+    const dt = Math.min(delta, 1 / 20);
+    const cam = activeCamera();
+    const ctl = activeControls();
+    if (cam && ctl) {
+      const [ir, ifw] = panIntent(heldKeysRef.current);
+      // Speed scales with how far out you are, so it feels the same zoomed in or out (in/s).
+      const reach =
+        view === 'plan'
+          ? 180 / Math.max(0.4, (cam as THREE.OrthographicCamera).zoom)
+          : Math.min(300, Math.max(50, cam.position.distanceTo(ctl.target) * 0.5));
+      const speed = reach * (fastRef.current ? 2.4 : 1);
+      const vel = panVelRef.current;
+      if (reducedMotion) {
+        vel.set(ir * speed, ifw * speed);
+      } else {
+        vel.set(damp(vel.x, ir * speed, 14, dt), damp(vel.y, ifw * speed, 14, dt));
+      }
+      if (vel.lengthSq() > 0.25) {
+        if (view === 'plan') {
+          panRight.set(1, 0, 0);
+          panForward.set(0, 0, -1);
+        } else {
+          cam.getWorldDirection(panForward);
+          panForward.y = 0;
+          if (panForward.lengthSq() < 1e-6) panForward.set(0, 0, -1);
+          panForward.normalize();
+          panRight.crossVectors(panForward, cam.up).normalize();
+        }
+        panStep.copy(panRight).multiplyScalar(vel.x * dt).addScaledVector(panForward, vel.y * dt);
+        // Keep the orbit target near the apartment so you can't drift off into the void.
+        const margin = 36;
+        const tx = Math.min(x1 + margin, Math.max(x0 - margin, ctl.target.x + panStep.x));
+        const tz = Math.min(z1 + margin, Math.max(z0 - margin, ctl.target.z + panStep.z));
+        panStep.set(tx - ctl.target.x, 0, tz - ctl.target.z);
+        cam.position.add(panStep);
+        ctl.target.add(panStep);
+        ctl.update();
+        active = true;
+      } else {
+        vel.set(0, 0);
+        if (ir !== 0 || ifw !== 0) active = true;
+      }
+    }
+
+    const now = performance.now();
+    for (const [id, grp] of itemGroupsRef.current) {
+      const baseY = itemYById.get(id);
+      if (baseY === undefined) continue;
+      const ud = grp.userData as { lift?: number; liftTarget?: number; spawnAt?: number };
+      let y = baseY;
+      if (ud.liftTarget !== undefined || ud.lift !== undefined) {
+        const target = reducedMotion ? 0 : (ud.liftTarget ?? 0);
+        const next = damp(ud.lift ?? 0, target, 22, dt);
+        ud.lift = Math.abs(next - target) < 0.01 ? target : next;
+        if (ud.lift === 0 && target === 0) {
+          ud.lift = undefined;
+          ud.liftTarget = undefined;
+        } else {
+          active = true;
+        }
+        y += ud.lift ?? 0;
+      }
+      if (ud.spawnAt !== undefined) {
+        const t = Math.min(1, (now - ud.spawnAt) / MOTION_MS.pieceSettle);
+        const k = easeOutUi(t);
+        y += (1 - k) * 6;
+        grp.scale.setScalar(0.96 + 0.04 * k);
+        if (t >= 1) {
+          ud.spawnAt = undefined;
+          grp.scale.setScalar(1);
+        } else {
+          active = true;
+        }
+      }
+      if (grp.position.y !== y) grp.position.y = y;
+    }
+    if (active) invalidate();
+  });
+
   useImperativeHandle(stageRef, () => ({
     zoomBy: (factor: number) => {
-      if (view === 'plan' && orthoCamRef.current) {
-        orthoCamRef.current.zoom = Math.min(12, Math.max(0.4, orthoCamRef.current.zoom * factor));
-        orthoCamRef.current.updateProjectionMatrix();
+      if (view === 'plan' && orthoCamRef.current && controlsPlanRef.current) {
+        const cam = orthoCamRef.current;
+        const toZoom = Math.min(12, Math.max(0.4, cam.zoom * factor));
+        startCameraTween(cam, controlsPlanRef.current, cam.position, controlsPlanRef.current.target, toZoom, MOTION_MS.cameraZoom, easeOutUi);
       } else if (perspCamRef.current && controls3dRef.current) {
-        perspCamRef.current.position
-          .sub(controls3dRef.current.target)
-          .multiplyScalar(1 / factor)
-          .add(controls3dRef.current.target);
-        controls3dRef.current.update();
+        const ctl = controls3dRef.current;
+        const toPos = perspCamRef.current.position.clone().sub(ctl.target).multiplyScalar(1 / factor).add(ctl.target);
+        startCameraTween(perspCamRef.current, ctl, toPos, ctl.target, 1, MOTION_MS.cameraZoom, easeOutUi);
       }
       invalidate();
     },
@@ -187,6 +393,7 @@ export function SceneController({
       if (grp) {
         grp.position.x = nx;
         grp.position.z = nz;
+        if (firstMove) grp.userData.liftTarget = DRAG_LIFT_IN;
       }
       invalidate();
 
@@ -209,6 +416,8 @@ export function SceneController({
         cancelAnimationFrame(drag.raf);
         drag.raf = 0;
       }
+      const liftedGrp = itemGroupsRef.current.get(drag.id);
+      if (liftedGrp && liftedGrp.userData.liftTarget !== undefined) liftedGrp.userData.liftTarget = 0;
       if (drag.moved) {
         onMoveItem(drag.id, drag.lastX, drag.lastZ, false);
         onEndMoveItem();
@@ -376,6 +585,10 @@ export function SceneController({
   });
 
   const targetCenter: [number, number, number] = [cx, 0, cz];
+  const initialTarget: [number, number, number] = initialShot ? [...initialShot.target] : targetCenter;
+  const initialPosition: [number, number, number] = initialShot
+    ? [...initialShot.position]
+    : [cx + initDist * 0.25, initDist * 0.76, cz + initDist * 0.72];
 
   return (
     <>
@@ -385,7 +598,7 @@ export function SceneController({
         fov={38}
         near={2}
         far={6000}
-        position={[cx + initDist * 0.25, initDist * 0.76, cz + initDist * 0.72]}
+        position={initialPosition}
       />
       <OrthographicCamera
         ref={orthoCamRef}
@@ -399,15 +612,19 @@ export function SceneController({
         ref={controls3dRef}
         camera={perspCamRef.current ?? undefined}
         enabled={view === '3d'}
-        enableDamping={false}
+        enableDamping={!reducedMotion}
+        dampingFactor={0.14}
         rotateSpeed={0.95}
         panSpeed={1.0}
         zoomSpeed={1.15}
-        target={targetCenter}
+        target={initialTarget}
         maxPolarAngle={1.44}
         minDistance={55}
         maxDistance={2200}
         onChange={() => invalidate()}
+        onStart={() => {
+          cameraTweenRef.current = null;
+        }}
         mouseButtons={{
           LEFT: THREE.MOUSE.ROTATE,
           MIDDLE: THREE.MOUSE.DOLLY,
@@ -419,12 +636,16 @@ export function SceneController({
         camera={orthoCamRef.current ?? undefined}
         enabled={view === 'plan'}
         enableRotate={false}
-        enableDamping={false}
+        enableDamping={!reducedMotion}
+        dampingFactor={0.18}
         screenSpacePanning
         panSpeed={1.0}
         zoomSpeed={1.15}
         target={targetCenter}
         onChange={() => invalidate()}
+        onStart={() => {
+          cameraTweenRef.current = null;
+        }}
         mouseButtons={{
           LEFT: THREE.MOUSE.PAN,
           MIDDLE: THREE.MOUSE.DOLLY,

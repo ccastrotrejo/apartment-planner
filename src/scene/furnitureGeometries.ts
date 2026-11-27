@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import {
   buildArchedMirror,
   buildCoatRack,
+  buildGalleryPrints,
   buildHallCabinet,
   buildNightstand,
   buildQueenBed,
@@ -44,6 +45,7 @@ const FURNITURE_BUILDERS: Readonly<Record<string, () => FurniturePartDef[]>> = {
   'arched-mirror': buildArchedMirror,
   'hall-cabinet': buildHallCabinet,
   'bike-black': buildRoadBike,
+  'gallery-prints': buildGalleryPrints,
   'rug-6x9': buildRug,
   'plant-monstera': buildMonstera,
   'plant-zz': buildZzPlant,

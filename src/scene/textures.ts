@@ -129,6 +129,7 @@ export type TextureKey =
   | 'pellicle'
   | 'leaf'
   | 'tvArt'
+  | 'printArt'
   | 'ideScreen'
   | 'plaster';
 
@@ -147,6 +148,7 @@ export const TEX_INCHES: Record<TextureKey, readonly [number, number]> = {
   pellicle: [3.5, 3.5],
   leaf: [10, 10],
   tvArt: [1, 1],
+  printArt: [1, 1],
   ideScreen: [1, 1],
   plaster: [36, 36],
 };
@@ -735,6 +737,55 @@ export function getTextureBundle(key: TextureKey): TextureBundle {
       addNoise(cCtx, W, H, r, 5);
       const tex = wrapTex(cc, THREE.SRGBColorSpace, true);
       bundle = { map: tex, emissiveMap: tex };
+    }
+  } else if (key === 'printArt') {
+    // Two mid-century gallery prints side by side (left half / right half of the atlas).
+    const W = 1024;
+    const H = 672;
+    const [cc, cCtx] = makeCanvas(W, H);
+    if (cCtx) {
+      const pw = W / 2;
+      // Print A: terracotta arch, low sun, and a sage horizon band
+      cCtx.fillStyle = '#efe7d8';
+      cCtx.fillRect(0, 0, pw, H);
+      cCtx.fillStyle = '#c9b89d';
+      cCtx.fillRect(0, H * 0.7, pw, H * 0.3);
+      cCtx.fillStyle = '#b8643f';
+      cCtx.beginPath();
+      cCtx.moveTo(pw * 0.2, H * 0.7);
+      cCtx.lineTo(pw * 0.2, H * 0.42);
+      cCtx.arc(pw * 0.5, H * 0.42, pw * 0.3, Math.PI, 0);
+      cCtx.lineTo(pw * 0.8, H * 0.7);
+      cCtx.closePath();
+      cCtx.fill();
+      cCtx.fillStyle = '#e2b25f';
+      cCtx.beginPath();
+      cCtx.arc(pw * 0.5, H * 0.5, pw * 0.12, 0, Math.PI * 2);
+      cCtx.fill();
+      cCtx.fillStyle = '#7f8f7c';
+      cCtx.fillRect(0, H * 0.7, pw, H * 0.055);
+
+      // Print B: stacked half-moons and a charcoal stem
+      cCtx.fillStyle = '#e9e3d6';
+      cCtx.fillRect(pw, 0, pw, H);
+      const cx = pw * 1.5;
+      cCtx.fillStyle = '#36413c';
+      cCtx.fillRect(cx - pw * 0.012, H * 0.22, pw * 0.024, H * 0.6);
+      cCtx.fillStyle = '#d39b55';
+      cCtx.beginPath();
+      cCtx.arc(cx, H * 0.36, pw * 0.22, Math.PI, 0);
+      cCtx.fill();
+      cCtx.fillStyle = '#8c9a86';
+      cCtx.beginPath();
+      cCtx.arc(cx, H * 0.56, pw * 0.26, 0, Math.PI);
+      cCtx.fill();
+      cCtx.fillStyle = '#b8643f';
+      cCtx.beginPath();
+      cCtx.arc(cx + pw * 0.17, H * 0.72, pw * 0.07, 0, Math.PI * 2);
+      cCtx.fill();
+
+      addNoise(cCtx, W, H, r, 7);
+      bundle = { map: wrapTex(cc, THREE.SRGBColorSpace, true) };
     }
   } else if (key === 'ideScreen') {
     const W = 512;

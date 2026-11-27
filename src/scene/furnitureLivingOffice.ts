@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FURNITURE_CATALOG } from '../furniture/catalog';
-import { rbox, cushion, cylY, strut, tubePath, makePart, type FurniturePartDef } from './furniturePrimitives';
+import { rbox, cushion, cushionTopY, cylY, strut, tubePath, makePart, type FurniturePartDef } from './furniturePrimitives';
 
 export function buildSectional(): FurniturePartDef[] {
   const c = FURNITURE_CATALOG.sectional.colors;
@@ -15,10 +15,14 @@ export function buildSectional(): FurniturePartDef[] {
   uph.push(rbox(-50, lh + 1.0, -32, 50, 30.2, -26.5, 1.15));
   uph.push(rbox(44, lh, -32, 50, 24.0, 6, 1.2));
 
-  // Plump individual crowned seat cushions (chaise + two sofa seats)
-  uph.push(cushion(-49.8, lh + 4.1, -25.5, -17.15, sh, 32, 1.55, 0.55));
-  uph.push(cushion(-16.85, lh + 4.1, -25.5, 13.4, sh, 6, 1.55, 0.55));
-  uph.push(cushion(13.7, lh + 4.1, -25.5, 44.0, sh, 6, 1.55, 0.55));
+  // Plump individual crowned seat cushions (chaise + two sofa seats): [x0, z0, x1, z1]
+  const seatCrown = 0.55;
+  const seats: Array<[number, number, number, number]> = [
+    [-49.8, -25.5, -17.15, 32],
+    [-16.85, -25.5, 13.4, 6],
+    [13.7, -25.5, 44.0, 6],
+  ];
+  for (const [sx0, sz0, sx1, sz1] of seats) uph.push(cushion(sx0, lh + 4.1, sz0, sx1, sh, sz1, 1.55, seatCrown));
 
   // Subtle upholstered tuft buttons along the seats
   const buttonProto = new THREE.SphereGeometry(0.38, 10, 8);
@@ -26,8 +30,10 @@ export function buildSectional(): FurniturePartDef[] {
   for (const bx of [-41.5, -33.5, -25.5, -9, -1.5, 6, 21.5, 29, 36.5]) {
     for (const bz of [-18, -9, 0, 9, 18, 25]) {
       if (bz <= 1.5 || bx < -18) {
+        const seat = seats.find(([sx0, sz0, sx1, sz1]) => bx > sx0 && bx < sx1 && bz > sz0 && bz < sz1);
+        if (!seat) continue;
         const btn = buttonProto.clone();
-        btn.translate(bx, sh + 0.12, bz);
+        btn.translate(bx, cushionTopY(...seat, sh, seatCrown, bx, bz) + 0.02, bz);
         uph.push(btn);
       }
     }
@@ -267,8 +273,15 @@ export function buildTorchiere(): FurniturePartDef[] {
 }
 
 export function buildStandingDesk(): FurniturePartDef[] {
-  const c = FURNITURE_CATALOG['standing-desk'].colors;
-  // W=55 (-27.5..27.5), D=28 (-14..14, front at +14, back at -14), desk top at y=29, monitors to y=49
+  const spec = FURNITURE_CATALOG['standing-desk'];
+  const c = spec.colors;
+  // Modeled on a 55 × 28 reference top (front at +14), then fit to the catalog size: the top and frame
+  // stretch, while monitors, keyboard, mat, laptop, and mug keep their shape and just move with the top.
+  const sx = spec.size[0] / 55;
+  const sz = spec.size[1] / 28;
+  const shiftBy = (geos: THREE.BufferGeometry[], ax: number, az: number) => {
+    for (const g of geos) g.translate(ax * (sx - 1), 0, az * (sz - 1));
+  };
   const H = 29.0;
   const t = 1.1;
   const top = [rbox(-27.5, H - t, -14, 27.5, H, 14, 0.25)];
@@ -324,6 +337,7 @@ export function buildStandingDesk(): FurniturePartDef[] {
     const housing = rbox(-m.w / 2, -m.h / 2, -0.4, m.w / 2, m.h / 2, 0.3, 0.18);
     housing.rotateY(m.yaw);
     housing.translate(m.dx, yBot + m.h / 2, mz);
+    shiftBy([housing], m.dx, mz);
     bezels.push(housing);
 
     if (m.bar) {
@@ -332,6 +346,7 @@ export function buildStandingDesk(): FurniturePartDef[] {
       barCyl.rotateZ(Math.PI / 2);
       barCyl.rotateY(m.yaw);
       barCyl.translate(m.dx, 48.72, mz + 0.85);
+      shiftBy([barCyl], m.dx, mz);
       bezels.push(barCyl);
     }
 
@@ -339,8 +354,15 @@ export function buildStandingDesk(): FurniturePartDef[] {
     const lcd = new THREE.PlaneGeometry(m.w - 0.64, m.h - 0.76);
     lcd.rotateY(m.yaw);
     lcd.translate(m.dx + Math.sin(m.yaw) * 0.34, yBot + m.h / 2 + 0.06, mz + Math.cos(m.yaw) * 0.34);
+    shiftBy([lcd], m.dx, mz);
     screens.push(lcd);
   }
+
+  for (const g of [...top, ...frame]) g.scale(sx, 1, sz);
+  shiftBy(matGeo, 0, 5.3);
+  shiftBy([...keycaps, ...topExtraWalnut, bezels[0], bezels[1]], 0, 5.7);
+  shiftBy([bezels[2], ...laptopSilver], -21.4, -2.3);
+  shiftBy(mugCeramic, 18.2, 5.8);
 
   return [
     makePart([...top, ...topExtraWalnut], c.top, 'walnut', true),

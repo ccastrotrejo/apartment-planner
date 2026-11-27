@@ -513,3 +513,42 @@ export function buildRoadBike(): FurniturePartDef[] {
     makePart(rack, c.rack, 'walnut', true),
   ];
 }
+
+export function buildGalleryPrints(): FurniturePartDef[] {
+  const c = FURNITURE_CATALOG['gallery-prints'].colors;
+  // Two 19 × 25 frames, 3 in apart, y = 49..74; front face at z = +0.7, wall at z = -0.7
+  const fw = 19;
+  const fh = 25;
+  const y0 = 49;
+  const bar = 1.0;
+  const zB = -0.7;
+  const zF = 0.7;
+  const frames: THREE.BufferGeometry[] = [];
+  const mats: THREE.BufferGeometry[] = [];
+  const art: THREE.BufferGeometry[] = [];
+  for (const [i, cx] of [-11, 11].entries()) {
+    const x0 = cx - fw / 2;
+    const x1 = cx + fw / 2;
+    const y1 = y0 + fh;
+    frames.push(
+      rbox(x0, y0, zB, x1, y0 + bar, zF, 0.12),
+      rbox(x0, y1 - bar, zB, x1, y1, zF, 0.12),
+      rbox(x0, y0 + bar, zB, x0 + bar, y1 - bar, zF, 0.12),
+      rbox(x1 - bar, y0 + bar, zB, x1, y1 - bar, zF, 0.12),
+    );
+    mats.push(rbox(x0 + bar, y0 + bar, zB, x1 - bar, y1 - bar, zF - 0.12, 0.02));
+    // Print window inside a 2.2 in mat; UVs pick the left or right half of the print atlas
+    const pw = fw - 2 * bar - 4.4;
+    const ph = fh - 2 * bar - 4.4;
+    const plane = new THREE.PlaneGeometry(pw, ph);
+    const uv = plane.getAttribute('uv');
+    for (let k = 0; k < uv.count; k++) uv.setX(k, (uv.getX(k) + i) / 2);
+    plane.translate(cx, y0 + fh / 2, zF - 0.1);
+    art.push(plane);
+  }
+  return [
+    makePart(frames, c.frame, 'oak', true),
+    makePart(mats, c.mat, 'paint', false),
+    makePart(art, '#ffffff', 'printArt', false),
+  ];
+}

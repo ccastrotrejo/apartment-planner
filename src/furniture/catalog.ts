@@ -135,21 +135,6 @@ export const FURNITURE_CATALOG: Record<string, FurnitureSpec> = {
     },
     note: 'Ergonomic task chair (size B): 5-star graphite base on twin-wheel casters, contoured waterfall pellicle mesh seat, and PostureFit lumbar.',
   },
-  'counter-stool': {
-    key: 'counter-stool',
-    name: 'Counter stool',
-    group: 'Office & kitchen',
-    swatch: '#ece8e0',
-    size: [18, 18, 32.8],
-    hit: [-9, 9, -9, 9],
-    seat: true,
-    colors: {
-      shell: '#efece4',
-      wood: '#8b613c',
-      metal: '#202224',
-    },
-    note: 'Curved molded bucket counter stool on splayed white-oak legs with a welded black steel footrest.',
-  },
   'queen-bed': {
     key: 'queen-bed',
     name: 'Queen bed',

@@ -183,8 +183,6 @@ export const LODEN_A4_SPEC: ApartmentSpec = {
     ['arched-mirror', 137.25, 137, 90],
     ['hall-cabinet', 121, 59, -90],
     ['tier-shelf', 104, 42.5, 0],
-    ['counter-stool', 70.75, 200, 90],
-    ['counter-stool', 70.75, 218, 90],
     ['torchiere-lamp', 11, 45, 0],
     ['tripod-lamp', 217.7, 9, 0],
     ['plant-monstera', 14, 6, 0],

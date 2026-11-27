@@ -106,8 +106,9 @@ export const FURNITURE_CATALOG: Record<string, FurnitureSpec> = {
     name: 'Standing desk + monitors',
     group: 'Office & kitchen',
     swatch: '#6d5c4c',
-    size: [55, 28, 49],
-    hit: [-27.5, 27.5, -14, 14],
+    // 145 × 57 cm desktop
+    size: [57.1, 22.4, 49],
+    hit: [-28.55, 28.55, -11.2, 11.2],
     tuck: true,
     colors: {
       top: '#756352',
